@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible PocketNAS problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include passwords, signing keys or sensitive personal filenames."
+  - type: input
+    id: version
+    attributes:
+      label: PocketNAS version
+      placeholder: v2.3.0-beta.1
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Android device and version
+      placeholder: "Realme C71 / Android 16"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: dropdown
+    id: auth
+    attributes:
+      label: Authentication
+      options: ["Off", "On", "Not applicable"]
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Paste relevant `adb logcat -b crash -d` output if applicable.
+      render: shell

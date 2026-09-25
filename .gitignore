@@ -1,0 +1,30 @@
+# Build output
+build/
+dist/
+*.apk
+*.aab
+*.so
+
+# Signing material / secrets
+*.jks
+*.keystore
+*.pem
+*.p12
+*.pfx
+*.key
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
