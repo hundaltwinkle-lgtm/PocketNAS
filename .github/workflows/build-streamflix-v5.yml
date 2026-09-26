@@ -1,0 +1,79 @@
+name: Build Streamflix TV APK v5
+
+on:
+  push:
+    branches: [chatgpt-streamflix-apk-build]
+    paths:
+      - "streamflix-package20/**"
+      - ".github/workflows/build-streamflix-v5.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          parts = sorted(Path("streamflix-package20").glob("part*.hex"))
+          data = bytes.fromhex("".join(p.read_text().strip() for p in parts))
+          Path("/tmp/streamflix-source.zip").write_bytes(data)
+          PY
+          rm -rf /tmp/streamflix-src
+          mkdir /tmp/streamflix-src
+          unzip -q /tmp/streamflix-source.zip -d /tmp/streamflix-src
+
+      - name: Patch AGP 9 build file
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("/tmp/streamflix-src/StreamflixTV-2.0.0-rebuild/app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace('id("org.jetbrains.kotlin.android")\n', '')
+          s = s.replace('compileSdk = 37', 'compileSdk = 36')
+          old = '''    kotlinOptions {
+              jvmTarget = "17"
+              freeCompilerArgs += listOf("-Xjvm-default=all")
+          }
+
+          '''
+          s = s.replace(old, '')
+          p.write_text(s)
+          print(s[:1800])
+          PY
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.1"
+
+      - name: Compile
+        working-directory: /tmp/streamflix-src/StreamflixTV-2.0.0-rebuild
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Collect APK
+        run: |
+          cp /tmp/streamflix-src/StreamflixTV-2.0.0-rebuild/app/build/outputs/apk/debug/app-debug.apk Streamflix-TV-v2.0.0-debug.apk
+          sha256sum Streamflix-TV-v2.0.0-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Streamflix-TV-v2.0.0-debug
+          path: Streamflix-TV-v2.0.0-debug.apk
+          retention-days: 7
