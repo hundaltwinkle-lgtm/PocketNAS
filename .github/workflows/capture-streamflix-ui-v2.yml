@@ -1,0 +1,82 @@
+name: Capture Streamflix TV Screenshots v2
+
+on:
+  push:
+    branches: [chatgpt-streamflix-apk-build]
+    paths:
+      - ".github/workflows/capture-streamflix-ui-v2.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  capture:
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download built APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p apk-artifact
+          gh api -H "Accept: application/vnd.github+json"             /repos/hundaltwinkle-lgtm/PocketNAS/actions/artifacts/10901984055/zip             > apk-artifact.zip
+          unzip -q apk-artifact.zip -d apk-artifact
+          find apk-artifact -type f -maxdepth 2 -print
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Run APK and capture real UI
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: arm64-v8a
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -eux
+            APK="$(find "$GITHUB_WORKSPACE/apk-artifact" -name '*.apk' | head -1)"
+            adb install -r "$APK"
+            adb shell pm clear com.streamflix.tv || true
+            adb shell am force-stop com.streamflix.tv || true
+            adb shell am start -W -n com.streamflix.tv/.MainActivity
+
+            mkdir -p "$GITHUB_WORKSPACE/screenshots"
+            sleep 15
+
+            adb shell screencap -p /sdcard/01-home.png
+            adb pull /sdcard/01-home.png "$GITHUB_WORKSPACE/screenshots/01-home.png"
+
+            adb shell input keyevent 22
+            adb shell input keyevent 22
+            sleep 2
+            adb shell screencap -p /sdcard/02-home-focused.png
+            adb pull /sdcard/02-home-focused.png "$GITHUB_WORKSPACE/screenshots/02-home-focused.png"
+
+            adb shell input keyevent 20
+            adb shell input keyevent 23
+            sleep 10
+            adb shell screencap -p /sdcard/03-selected.png
+            adb pull /sdcard/03-selected.png "$GITHUB_WORKSPACE/screenshots/03-selected.png"
+
+            adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" > "$GITHUB_WORKSPACE/screenshots/focus.txt" || true
+            adb shell uiautomator dump /sdcard/window.xml || true
+            adb pull /sdcard/window.xml "$GITHUB_WORKSPACE/screenshots/window.xml" || true
+            file "$GITHUB_WORKSPACE"/screenshots/*.png
+            ls -lh "$GITHUB_WORKSPACE/screenshots"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Streamflix-TV-real-screenshots-v2
+          path: screenshots/
+          if-no-files-found: warn
+          retention-days: 7
