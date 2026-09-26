@@ -1,0 +1,69 @@
+name: Build Streamflix TV APK v3
+
+on:
+  push:
+    branches:
+      - chatgpt-streamflix-apk-build
+    paths:
+      - "streamflix-package20/**"
+      - ".github/workflows/build-streamflix-v3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          parts = sorted(Path("streamflix-package20").glob("part*.hex"))
+          assert len(parts) == 5, len(parts)
+          Path("/tmp/streamflix-source.zip").write_bytes(
+              bytes.fromhex("".join(p.read_text().strip() for p in parts))
+          )
+          PY
+          mkdir -p /tmp/streamflix-src
+          unzip -q /tmp/streamflix-source.zip -d /tmp/streamflix-src
+          sed -i 's/compileSdk = 37/compileSdk = 36/' /tmp/streamflix-src/StreamflixTV-2.0.0-rebuild/app/build.gradle.kts
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android 36 platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.1"
+
+      - name: Compile APK
+        working-directory: /tmp/streamflix-src/StreamflixTV-2.0.0-rebuild
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Prepare APK
+        run: |
+          cp /tmp/streamflix-src/StreamflixTV-2.0.0-rebuild/app/build/outputs/apk/debug/app-debug.apk Streamflix-TV-v2.0.0-debug.apk
+          sha256sum Streamflix-TV-v2.0.0-debug.apk
+          ls -lh Streamflix-TV-v2.0.0-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Streamflix-TV-v2.0.0-debug
+          path: Streamflix-TV-v2.0.0-debug.apk
+          if-no-files-found: error
+          retention-days: 7
