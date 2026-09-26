@@ -4,7 +4,7 @@ on:
   push:
     branches: [chatgpt-streamflix-apk-build]
     paths:
-      - "streamflix-v22/**"
+      - "streamflix-v22-patch/**"
       - ".github/workflows/build-streamflix-v22.yml"
   workflow_dispatch:
 
@@ -20,13 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct Streamflix 2.1 base source
+      - name: Reconstruct Streamflix 2.1 base
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import base64
-
           root = Path("streamflix-build")
           order = [
               "src.b64.part0",
@@ -40,19 +39,34 @@ jobs:
               "src.b64.part4",
           ]
           payload = "".join((root / name).read_text().strip() for name in order)
-          Path("/tmp/streamflix-source.zip").write_bytes(base64.b64decode(payload))
+          Path("/tmp/streamflix-base.zip").write_bytes(base64.b64decode(payload))
           PY
           rm -rf /tmp/streamflix-src
           mkdir -p /tmp/streamflix-src
-          unzip -q /tmp/streamflix-source.zip -d /tmp/streamflix-src
+          unzip -q /tmp/streamflix-base.zip -d /tmp/streamflix-src
+          test -f /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild/settings.gradle.kts
 
-      - name: Apply Streamflix 2.2 overlay
+      - name: Apply Streamflix 2.2 responsive UI patch
         shell: bash
         run: |
-          base64 -d streamflix-v22/overlay.b64 > /tmp/streamflix-v22-overlay.zip
-          unzip -qo /tmp/streamflix-v22-overlay.zip -d /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild
-          test -f /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild/app/src/main/java/com/streamflix/tv/ui/components/LiveThumbnailWarmup.kt
-          grep -q 'versionName = "2.2.0"' /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild/app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib
+          root = Path("streamflix-v22-patch")
+          payload = "".join((root / f"part{i:02d}.b64").read_text().strip() for i in range(2))
+          data = base64.b64decode(payload)
+          digest = hashlib.sha256(data).hexdigest()
+          expected = "f3dd582f1b2887063ab06fa2ef023ee727bb40094c8d6bc2a31c2f758ef8c72b"
+          if digest != expected:
+              raise SystemExit(f"Patch checksum mismatch: {digest}")
+          Path("/tmp/streamflix-v22-patch.zip").write_bytes(data)
+          print("Patch checksum OK:", digest)
+          PY
+          cd /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild
+          unzip -qo /tmp/streamflix-v22-patch.zip
+          grep -q 'versionName = "2.2.0"' app/build.gradle.kts
+          grep -q 'fun BottomNav' app/src/main/java/com/streamflix/tv/ui/components/TopNav.kt
+          grep -q 'PortraitPlayer' app/src/main/java/com/streamflix/tv/ui/screens/PlayerScreen.kt
 
       - name: Patch project for AGP 9
         shell: bash
@@ -60,7 +74,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           root = Path("/tmp/streamflix-src/StreamflixTV-2.1.0-rebuild")
           app = root / "app/build.gradle.kts"
           top = root / "build.gradle.kts"
@@ -73,6 +86,9 @@ jobs:
           t = top.read_text()
           t = re.sub(r'^\s*id\("org\.jetbrains\.kotlin\.android"\).*\n', '', t, flags=re.M)
           top.write_text(t)
+
+          assert "kotlinOptions" not in app.read_text()
+          print("AGP 9 patch verified")
           PY
 
       - name: Set up JDK 17
@@ -101,21 +117,22 @@ jobs:
         working-directory: /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild
         run: gradle --no-daemon --stacktrace assembleDebug
 
-      - name: Collect APK
+      - name: Verify and collect APK
         shell: bash
         run: |
           SRC=/tmp/streamflix-src/StreamflixTV-2.1.0-rebuild/app/build/outputs/apk/debug/app-debug.apk
           test -f "$SRC"
-          cp "$SRC" Streamflix-TV-v2.2.0-debug.apk
-          sha256sum Streamflix-TV-v2.2.0-debug.apk | tee Streamflix-TV-v2.2.0-debug.sha256
-          ls -lh Streamflix-TV-v2.2.0-debug.apk
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose "$SRC"
+          cp "$SRC" Streamflix-TV-v2.2.0-professional-debug.apk
+          sha256sum Streamflix-TV-v2.2.0-professional-debug.apk | tee Streamflix-TV-v2.2.0-professional-debug.sha256
+          ls -lh Streamflix-TV-v2.2.0-professional-debug.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Streamflix-TV-v2.2.0-debug
+          name: Streamflix-TV-v2.2.0-professional-debug
           path: |
-            Streamflix-TV-v2.2.0-debug.apk
-            Streamflix-TV-v2.2.0-debug.sha256
+            Streamflix-TV-v2.2.0-professional-debug.apk
+            Streamflix-TV-v2.2.0-professional-debug.sha256
           if-no-files-found: error
           retention-days: 7
