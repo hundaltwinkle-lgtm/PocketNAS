@@ -26,6 +26,7 @@ jobs:
           test -f /tmp/streamflix/StreamflixTV-2.1.0-rebuild/settings.gradle.kts
           python3 - <<'PY'
           from pathlib import Path
+          import re
           root = Path("/tmp/streamflix/StreamflixTV-2.1.0-rebuild")
           top = root / "build.gradle.kts"
           s = top.read_text()
@@ -43,6 +44,7 @@ jobs:
 
           '''
           s = s.replace(old, '')
+          s = re.sub(r'\n    kotlinOptions \{.*?\n    \}\n', '\n', s, count=1, flags=re.S)
           app.write_text(s)
           PY
 
