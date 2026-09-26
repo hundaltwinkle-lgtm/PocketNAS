@@ -1,0 +1,124 @@
+name: Build Streamflix TV APK v2.1
+
+on:
+  push:
+    branches: [chatgpt-streamflix-apk-build]
+    paths:
+      - "streamflix-build/**"
+      - ".github/workflows/build-streamflix-v21.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct Streamflix 2.1.0 source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+
+          root = Path("streamflix-build")
+          order = [
+              "src.b64.part0",
+              "src.b64.part1a",
+              "src.b64.part1b",
+              "src.b64.part1c",
+              "src.b64.part1d",
+              "src.b64.part1e",
+              "src.b64.part2",
+              "src.b64.part3",
+              "src.b64.part4",
+          ]
+          missing = [name for name in order if not (root / name).exists()]
+          if missing:
+              raise SystemExit(f"Missing source chunks: {missing}")
+
+          payload = "".join((root / name).read_text().strip() for name in order)
+          Path("/tmp/streamflix-source.zip").write_bytes(base64.b64decode(payload))
+          print("Reconstructed", Path("/tmp/streamflix-source.zip").stat().st_size, "bytes")
+          PY
+
+          rm -rf /tmp/streamflix-src
+          mkdir -p /tmp/streamflix-src
+          unzip -q /tmp/streamflix-source.zip -d /tmp/streamflix-src
+          test -f /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild/settings.gradle.kts
+
+      - name: Patch project for AGP 9
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path("/tmp/streamflix-src/StreamflixTV-2.1.0-rebuild")
+          app = root / "app/build.gradle.kts"
+          top = root / "build.gradle.kts"
+
+          s = app.read_text()
+          s = s.replace('id("org.jetbrains.kotlin.android")', '')
+          s = re.sub(r'\n\s*kotlinOptions\s*\{.*?\n\s*\}\s*\n', '\n', s, flags=re.S)
+          app.write_text(s)
+
+          t = top.read_text()
+          t = re.sub(r'^\s*id\("org\.jetbrains\.kotlin\.android"\).*\n', '', t, flags=re.M)
+          top.write_text(t)
+
+          assert "kotlinOptions" not in app.read_text()
+          print("AGP 9 Kotlin patch verified")
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android API 37
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --channel=3 "platforms;android-37.0" "build-tools;36.0.0"
+          ls -la "$ANDROID_SDK_ROOT/platforms"
+
+      - name: Set up Gradle 9.6.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.1"
+
+      - name: Compile Streamflix 2.1.0
+        working-directory: /tmp/streamflix-src/StreamflixTV-2.1.0-rebuild
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          SRC=/tmp/streamflix-src/StreamflixTV-2.1.0-rebuild/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$SRC"
+          cp "$SRC" Streamflix-TV-v2.1.0-debug.apk
+          sha256sum Streamflix-TV-v2.1.0-debug.apk | tee Streamflix-TV-v2.1.0-debug.sha256
+          ls -lh Streamflix-TV-v2.1.0-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Streamflix-TV-v2.1.0-debug
+          path: |
+            Streamflix-TV-v2.1.0-debug.apk
+            Streamflix-TV-v2.1.0-debug.sha256
+          if-no-files-found: error
+          retention-days: 7
