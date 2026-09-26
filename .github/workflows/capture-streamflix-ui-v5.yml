@@ -1,0 +1,80 @@
+name: Capture Streamflix TV Screenshots v5
+
+on:
+  push:
+    branches: [chatgpt-streamflix-apk-build]
+    paths:
+      - ".github/workflows/capture-streamflix-ui-v5.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download built APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p apk-artifact
+          gh api -H "Accept: application/vnd.github+json"             /repos/hundaltwinkle-lgtm/PocketNAS/actions/artifacts/10901984055/zip             > apk-artifact.zip
+          unzip -q apk-artifact.zip -d apk-artifact
+          test -f apk-artifact/Streamflix-TV-v2.0.0-debug.apk
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Enable KVM access
+        run: sudo chmod 666 /dev/kvm || true
+
+      - name: Run actual APK and capture UI
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: tv_1080p
+          cores: 2
+          ram-size: 3072M
+          heap-size: 512M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            adb install -r "$GITHUB_WORKSPACE/apk-artifact/Streamflix-TV-v2.0.0-debug.apk"
+            adb shell wm size 1920x1080
+            adb shell wm density 320
+            adb shell am force-stop com.streamflix.tv || true
+            adb shell am start -W -n com.streamflix.tv/.MainActivity
+            mkdir -p "$GITHUB_WORKSPACE/screenshots"
+            sleep 15
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshots/01-home.png"
+            adb shell input keyevent KEYCODE_DPAD_RIGHT
+            adb shell input keyevent KEYCODE_DPAD_RIGHT
+            sleep 2
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshots/02-home-focused.png"
+            adb shell input keyevent KEYCODE_DPAD_DOWN
+            adb shell input keyevent KEYCODE_DPAD_CENTER
+            sleep 8
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshots/03-after-select.png"
+            adb shell input keyevent KEYCODE_BACK
+            sleep 3
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshots/04-after-back.png"
+            adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/screenshots/activity.txt"
+            file "$GITHUB_WORKSPACE/screenshots/01-home.png"
+            ls -lh "$GITHUB_WORKSPACE/screenshots"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Streamflix-TV-real-screenshots-v5
+          path: screenshots/
+          if-no-files-found: warn
+          retention-days: 7
