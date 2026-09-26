@@ -16,7 +16,7 @@ Settings
 
 Vendor wording varies. On Realme/ColorOS, use Settings search for **All files access**, **Manage all files**, or **Special app access**.
 
-PocketNAS v3.0 actively probes a temporary file in the shared-storage root and reports one of these states:
+PocketNAS v3.1 actively probes a temporary file in the shared-storage root and reports one of these states:
 
 ```text
 STORAGE: FULL READ/WRITE

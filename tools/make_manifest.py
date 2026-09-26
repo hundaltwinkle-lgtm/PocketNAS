@@ -8,7 +8,7 @@ def S(s):
     return idx[s]
 base=[
 'android','http://schemas.android.com/apk/res/android','manifest','package','com.pocketnas.wifidrive',
-'versionCode','30','versionName','3.0','uses-sdk','minSdkVersion','28','targetSdkVersion','30',
+'versionCode','31','versionName','3.1','uses-sdk','minSdkVersion','28','targetSdkVersion','30',
 'uses-permission','name',
 'android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.ACCESS_WIFI_STATE',
 'android.permission.READ_EXTERNAL_STORAGE','android.permission.WRITE_EXTERNAL_STORAGE','android.permission.MANAGE_EXTERNAL_STORAGE',
@@ -48,7 +48,7 @@ def se(name,attrs=()):
     return bytes(out)
 def ee(name): return nh(0x103,24)+struct.pack('<II',NO_INDEX,S(name))
 chunks=[sns(),
- se('manifest',[attr('package','com.pocketnas.wifidrive'),attr('versionCode',30,True,'int'),attr('versionName','3.0',True)]),
+ se('manifest',[attr('package','com.pocketnas.wifidrive'),attr('versionCode',31,True,'int'),attr('versionName','3.1',True)]),
  se('uses-sdk',[attr('minSdkVersion',28,True,'int'),attr('targetSdkVersion',30,True,'int')]),ee('uses-sdk')]
 perms=['android.permission.INTERNET','android.permission.ACCESS_NETWORK_STATE','android.permission.ACCESS_WIFI_STATE','android.permission.READ_EXTERNAL_STORAGE','android.permission.WRITE_EXTERNAL_STORAGE','android.permission.MANAGE_EXTERNAL_STORAGE','android.permission.FOREGROUND_SERVICE','android.permission.RECEIVE_BOOT_COMPLETED','android.permission.POST_NOTIFICATIONS','android.permission.WAKE_LOCK']
 for p in perms:

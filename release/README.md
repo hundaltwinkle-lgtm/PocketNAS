@@ -1,20 +1,13 @@
-# PocketNAS Release Assets
+# PocketNAS v3.1 ready-to-use release assets
 
-Current beta source version: `v3.0.0-beta.1`.
+Normal users do not need to compile PocketNAS.
 
-Recommended GitHub Release assets:
+- `PocketNAS-v3.1-arm64.apk` — Android 9+ ARM64 APK.
+- `PocketNAS-Drive-Setup-v3.1.exe` — one-click Windows Drive installer.
+- `SHA256SUMS.txt` — SHA-256 checksums for release artifacts.
 
-```text
-PocketNAS-v3.0-arm64.apk
-PocketNAS-v3.0-SHA256SUMS.txt
-```
+The Windows installer is also embedded in/served by the running Android app at:
 
-The Windows auto-drive setup is served directly by the running APK at:
+`http://PHONE-IP:8080/PocketNAS-Drive-Setup-v3.1.exe`
 
-```text
-http://PHONE-IP:8080/PocketNAS-Windows-Setup.ps1
-```
-
-The source copy of that script is stored under `windows/`.
-
-Do not commit APK signing private keys or keystores.
+Do **not** place the private Android signing key in this repository.

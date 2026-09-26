@@ -3,7 +3,7 @@
 > Turn an Android phone into a local Wi‑Fi file server, browser file manager, WebDAV share, and automatically reconnecting Windows drive.
 
 ![Status](https://img.shields.io/badge/status-beta-orange)
-![Version](https://img.shields.io/badge/version-3.0.0--beta.1-blue)
+![Version](https://img.shields.io/badge/version-3.1.0--beta.1-blue)
 ![Android](https://img.shields.io/badge/Android-9%2B-green)
 ![ABI](https://img.shields.io/badge/ABI-arm64--v8a-blue)
 ![Protocol](https://img.shields.io/badge/protocol-WebDAV-purple)
@@ -17,6 +17,16 @@ PocketNAS is a lightweight Android NAS-style application for trusted local netwo
 
 > [!IMPORTANT]
 > PocketNAS v3 is beta software. Keep backups of important data. Test delete/rename/upload operations with non-critical files first. Do not expose TCP port 8080 directly to the public Internet.
+
+## Ready downloads
+
+Normal users do **not** need Git, Android Studio, Go, Python, rclone configuration, or manual WebDAV registry editing.
+
+- **Android APK:** [Download PocketNAS v3.1 for ARM64](https://github.com/hundaltwinkle-lgtm/PocketNAS/releases/download/v3.1.0-beta.1/PocketNAS-v3.1-arm64.apk)
+- **Windows one-click installer:** [Download PocketNAS Drive Setup v3.1](https://github.com/hundaltwinkle-lgtm/PocketNAS/releases/download/v3.1.0-beta.1/PocketNAS-Drive-Setup-v3.1.exe)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/hundaltwinkle-lgtm/PocketNAS/releases/download/v3.1.0-beta.1/SHA256SUMS.txt)
+
+The Android app also serves the same Windows installer directly from the phone at `http://PHONE-IP:8080/PocketNAS-Drive-Setup-v3.1.exe`.
 
 ## Highlights in v3
 
@@ -66,13 +76,13 @@ After setup, the Android APK remains the server and the Windows watcher automati
 ADB installation:
 
 ```powershell
-adb install PocketNAS-v3.0-arm64.apk
+adb install PocketNAS-v3.1-arm64.apk
 ```
 
-Update from a PocketNAS v2.4/v2.5 build signed with the same project certificate:
+If Android reports a signing-certificate mismatch with an older experimental build, uninstall that development build once and install the public v3.1 APK. Future public releases must use the same v3.1 release signing identity.
 
 ```powershell
-adb install -r PocketNAS-v3.0-arm64.apk
+adb install PocketNAS-v3.1-arm64.apk
 ```
 
 Open PocketNAS once after installation.
@@ -177,17 +187,17 @@ Microsoft's built-in WebDAV redirector has legacy file-size, timeout and caching
 
 # Option C — PocketNAS Windows Drive (recommended for Windows)
 
-PocketNAS v3 serves its own Windows setup script directly from the phone.
+PocketNAS v3.1 serves its one-click Windows Drive installer directly from the phone.
 
 On the Windows PC:
 
 1. Open the PocketNAS URL in Chrome/Edge/Firefox.
-2. Click **Windows Drive Setup**.
-3. Save `PocketNAS-Windows-Setup.ps1`.
-4. Run it with PowerShell.
-5. Approve the Windows administrator/UAC prompt once.
+2. Click **Install Windows Drive**.
+3. Save `PocketNAS-Drive-Setup-v3.1.exe`.
+4. Run the EXE.
+5. Approve the normal Windows administrator/UAC prompt if dependency installation is required.
 
-The script then:
+The installer then:
 
 1. configures Windows WebClient fallback limits;
 2. installs/updates **WinFsp** through `winget`;
@@ -216,6 +226,10 @@ This PC
     ├── Music
     └── Pictures
 ```
+
+### Advanced fallback
+
+`PocketNAS-Windows-Setup.ps1` remains in the source tree for troubleshooting and advanced/manual installation. Normal users should use the EXE.
 
 ### Why v3 uses rclone + WinFsp
 

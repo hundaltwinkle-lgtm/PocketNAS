@@ -1,6 +1,26 @@
 # Changelog
 
-## 3.0.0-beta.1
+All notable changes to PocketNAS are documented here.
+
+## [3.1.0-beta.1] - 2026-09-26
+
+### Added
+- Ready-to-use Android APK in the release package.
+- One-click `PocketNAS-Drive-Setup-v3.1.exe` for Windows.
+- The Android web interface serves the Windows EXE directly from the phone.
+- Automatic PocketNAS LAN discovery by persistent device ID.
+- Automatic rclone configuration and WinFsp/rclone installation through `winget`.
+- Automatic `P:` drive mounting and reconnect after Windows sign-in or phone IP changes.
+- Windows Start Menu/Desktop shortcuts and Add/Remove Programs entry.
+- New PocketNAS visual identity used by the browser UI and installed Windows shortcuts.
+
+### Changed
+- Large-file Windows Explorer access now uses rclone + WinFsp rather than the Windows WebClient redirector.
+- Browser setup button now downloads the one-click Windows executable; PowerShell setup remains as an advanced fallback.
+
+### Release-signing note
+- v3.1 starts a new permanent public-release Android signing identity. Experimental development APKs signed with earlier temporary keys may need to be uninstalled once before installing v3.1. Future public releases must use the same v3.1 signing key.
+
 
 - Added PocketNAS Windows Drive setup served directly by the Android APK.
 - Added Windows auto-discovery and reconnect watcher using a persistent device ID.

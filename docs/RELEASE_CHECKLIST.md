@@ -55,7 +55,7 @@
 
 ## GitHub release
 
-- [ ] Tag uses semantic release name (example `v3.0.0-beta.1`).
+- [ ] Tag uses semantic release name (example `v3.1.0-beta.1`).
 - [ ] Release marked **pre-release** while project remains beta.
 - [ ] Upload signed APK.
 - [ ] Upload `SHA256SUMS.txt`.

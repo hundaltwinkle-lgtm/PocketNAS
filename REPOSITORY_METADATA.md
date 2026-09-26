@@ -10,11 +10,11 @@
 
 `android`, `webdav`, `wifi-file-transfer`, `nas`, `windows`, `file-server`, `network-drive`, `arm64`, `native-android`, `rclone`, `winfsp`, `open-source`
 
-**Recommended first public release tag:** `v3.0.0-beta.1`
+**Recommended first public release tag:** `v3.1.0-beta.1`
 
 **Recommended release status:** Pre-release / Beta
 
-## v3.0 beta highlights
+## v3.1 beta highlights
 
 - Browser File Manager + WebDAV from one Android server
 - Automatic Windows Drive setup served directly by the APK

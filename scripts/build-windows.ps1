@@ -21,7 +21,7 @@ $env:POCKETNAS_MANIFEST_OUT = Join-Path $ApkRoot "AndroidManifest.xml"
 $env:POCKETNAS_DEX_OUT = Join-Path $ApkRoot "classes.dex"
 python (Join-Path $Root "tools\make_manifest.py")
 python (Join-Path $Root "tools\make_dex.py")
-python (Join-Path $Root "tools\package_apk.py") --root $ApkRoot --out (Join-Path $Build "PocketNAS-v3.0-unsigned.apk")
-python (Join-Path $Root "tools\verify_release.py") (Join-Path $Build "PocketNAS-v3.0-unsigned.apk")
-Write-Host "`nUnsigned APK: $Build\PocketNAS-v3.0-unsigned.apk"
+python (Join-Path $Root "tools\package_apk.py") --root $ApkRoot --out (Join-Path $Build "PocketNAS-v3.1-unsigned.apk")
+python (Join-Path $Root "tools\verify_release.py") (Join-Path $Build "PocketNAS-v3.1-unsigned.apk")
+Write-Host "`nUnsigned APK: $Build\PocketNAS-v3.1-unsigned.apk"
 Write-Host "Sign it using apksigner. See docs\BUILDING.md."

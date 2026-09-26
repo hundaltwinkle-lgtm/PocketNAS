@@ -20,7 +20,7 @@ Password: the permanent password saved in the app
 
 ## Do not use SMB syntax
 
-PocketNAS v3.0 is WebDAV, not SMB. These are not equivalent:
+PocketNAS v3.1 is WebDAV, not SMB. These are not equivalent:
 
 ```text
 Correct: http://192.168.1.20:8080/

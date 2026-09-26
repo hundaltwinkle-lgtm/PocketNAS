@@ -1,17 +1,7 @@
-# GitHub update required
+# GitHub update status
 
-The public repository was inspected on 2026-09-26 and still contains the v2.3.0-beta.1 source line.
+This tree is the PocketNAS `v3.1.0-beta.1` public source line.
 
-This source package is the newer PocketNAS v3.0.0-beta.1 line and adds:
+It includes the browser file manager, WebDAV server, `/api/status` discovery endpoint, one-click Windows Drive installer source, WinFsp/rclone auto-mount workflow, automatic LAN rediscovery/reconnect, full-storage permission handling, release assets, documentation, and the new PocketNAS visual identity.
 
-- Browser File Manager
-- `/api/status` device discovery endpoint
-- PocketNAS Windows Drive workflow based on rclone + WinFsp
-- automatic phone rediscovery/reconnect logic
-- large-file Explorer workflow that avoids Windows WebClient limitations
-- Android All-files-access settings flow improvements
-- generated PocketNAS professional icon under `assets/pocketnas-icon.png`
-
-Replace/update the public repository source from this package before publishing a v3 release.
-
-Do not publish private signing keys or keystores.
+For normal users, publish the signed APK and Windows EXE as GitHub Release assets. Never commit the private Android signing key or its password.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-PocketNAS v3.0 is a deliberately small Android application consisting of a native C core plus a minimal DEX bridge for Android service/receiver lifecycle integration.
+PocketNAS v3.1 is a deliberately small Android application consisting of a native C core plus a minimal DEX bridge for Android service/receiver lifecycle integration.
 
 ## Runtime components
 
@@ -83,7 +83,7 @@ The configured password is stored in the app-private configuration file. The imp
 
 ## DEX generation
 
-The repository does not compile Java/Kotlin source for v3.0. `tools/make_dex.py` emits a small DEX file directly. This unusual design keeps the application minimal but increases maintenance risk. v3.0 retains the fix for Dalvik format `35c` invoke encoding: the G register nibble and argument-count nibble must be placed correctly.
+The repository does not compile Java/Kotlin source for v3.1. `tools/make_dex.py` emits a small DEX file directly. This unusual design keeps the application minimal but increases maintenance risk. v3.1 retains the fix for Dalvik format `35c` invoke encoding: the G register nibble and argument-count nibble must be placed correctly.
 
 A future Gradle/Java/Kotlin service layer would be easier for contributors and is recommended as a modernization path.
 

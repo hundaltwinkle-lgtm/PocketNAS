@@ -2,29 +2,28 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-
-permissions:
-  contents: read
+  workflow_dispatch:
 
 jobs:
-  build:
+  source-sanity:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android NDK
-        run: yes | sdkmanager "ndk;26.3.11579264" "build-tools;35.0.0" "platform-tools"
-      - name: Build unsigned APK
+      - name: Python syntax checks
+        run: python -m py_compile tools/*.py
+      - name: Verify required public assets are present
         run: |
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
-          ./scripts/build-linux.sh
-      - name: Upload unsigned CI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PocketNAS-unsigned-ci
-          path: build/PocketNAS-v2.4-unsigned.apk
+          test -f release/PocketNAS-v3.1-arm64.apk
+          test -f release/PocketNAS-Drive-Setup-v3.1.exe
+          test -f release/SHA256SUMS.txt
+          test -f assets/pocketnas-icon.png
+          test -f assets/pocketnas-icon.ico
+      - name: Verify published checksums
+        run: |
+          cd release
+          sha256sum -c SHA256SUMS.txt

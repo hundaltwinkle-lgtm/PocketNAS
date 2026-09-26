@@ -35,7 +35,7 @@ Include:
 
 ## Current security characteristics
 
-PocketNAS v3.0 is intended for trusted LAN use.
+PocketNAS v3.1 is intended for trusted LAN use.
 
 - Transport: plain HTTP/WebDAV; no TLS.
 - Default authentication: OFF.

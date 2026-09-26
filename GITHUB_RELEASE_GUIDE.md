@@ -38,7 +38,7 @@ From the extracted repository folder:
 ```powershell
 git init
 git add .
-git commit -m "Open-source PocketNAS v3.0 beta"
+git commit -m "Open-source PocketNAS v3.1 beta"
 git branch -M main
 ```
 
@@ -87,14 +87,14 @@ Do not publish until:
 Recommended first public tag:
 
 ```text
-v3.0.0-beta.1
+v3.1.0-beta.1
 ```
 
 Commands:
 
 ```powershell
-git tag -a v3.0.0-beta.1 -m "PocketNAS v3.0.0 beta 1"
-git push origin v3.0.0-beta.1
+git tag -a v3.1.0-beta.1 -m "PocketNAS v3.0.0 beta 1"
+git push origin v3.1.0-beta.1
 ```
 
 ## 7. Create the GitHub release
@@ -102,7 +102,7 @@ git push origin v3.0.0-beta.1
 Title:
 
 ```text
-PocketNAS v3.0.0 Beta 1
+PocketNAS v3.1.0 Beta 1
 ```
 
 Mark it as **Pre-release**.
@@ -110,14 +110,15 @@ Mark it as **Pre-release**.
 Upload:
 
 ```text
-PocketNAS-v3.0-arm64.apk
+PocketNAS-v3.1-arm64.apk
+PocketNAS-Drive-Setup-v3.1.exe
 SHA256SUMS.txt
 ```
 
 Recommended release body:
 
 ```markdown
-## PocketNAS v3.0.0 Beta 1
+## PocketNAS v3.1.0 Beta 1
 
 PocketNAS turns an ARM64 Android 9+ phone into a WebDAV Wi-Fi drive that can be accessed from Windows File Explorer on the same reachable local network.
 
@@ -132,13 +133,13 @@ PocketNAS turns an ARM64 Android 9+ phone into a WebDAV Wi-Fi drive that can be 
 - Foreground background service and Android boot auto-start
 
 ### Installation
-1. Download `PocketNAS-v3.0-arm64.apk`.
+1. Download `PocketNAS-v3.1-arm64.apk`.
 2. Install it on an ARM64 Android 9+ phone.
 3. Grant All files access if requested.
 4. Open PocketNAS and note the displayed `http://PHONE-IP:8080/` address.
 5. For browser access, open that address in a PC browser.
 6. For native WebDAV, use **This PC → Add a network location**.
-7. For the recommended large-file Windows workflow, click **Windows Drive Setup** in the PocketNAS browser page and run the downloaded PowerShell setup.
+7. For the recommended large-file Windows workflow, click **Install Windows Drive** in the PocketNAS browser page and run `PocketNAS-Drive-Setup-v3.1.exe`.
 
 ### Security notice
 Authentication is off by default and the connection uses unencrypted HTTP. PocketNAS is intended only for trusted local networks. Read `SECURITY.md` before regular use.
@@ -152,7 +153,7 @@ This is a beta/pre-release. Please report reproducible issues with Android model
 Publish the SHA-256 next to the APK. Users can verify on Windows with:
 
 ```powershell
-Get-FileHash .\PocketNAS-v3.0-arm64.apk -Algorithm SHA256
+Get-FileHash .\PocketNAS-v3.1-arm64.apk -Algorithm SHA256
 ```
 
 ## 9. Screenshot/video
