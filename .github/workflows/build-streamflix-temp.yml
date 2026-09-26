@@ -24,8 +24,27 @@ jobs:
           cat streamflix-build/src.b64.part* | base64 -d > /tmp/streamflix-src.zip
           unzip -q /tmp/streamflix-src.zip -d /tmp/streamflix
           test -f /tmp/streamflix/StreamflixTV-2.1.0-rebuild/settings.gradle.kts
-          sed -i 's/compileSdk = 37/compileSdk = 36/' /tmp/streamflix/StreamflixTV-2.1.0-rebuild/app/build.gradle.kts
-          printf '\nandroid.builtInKotlin=false\nandroid.newDsl=false\n' >> /tmp/streamflix/StreamflixTV-2.1.0-rebuild/gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("/tmp/streamflix/StreamflixTV-2.1.0-rebuild")
+          top = root / "build.gradle.kts"
+          s = top.read_text()
+          s = s.replace('    id("org.jetbrains.kotlin.android") version "2.4.20" apply false\n', '')
+          top.write_text(s)
+
+          app = root / "app/build.gradle.kts"
+          s = app.read_text()
+          s = s.replace('    id("org.jetbrains.kotlin.android")\n', '')
+          s = s.replace('    compileSdk = 37', '    compileSdk = 36')
+          old = '''    kotlinOptions {
+              jvmTarget = "17"
+              freeCompilerArgs += listOf("-Xjvm-default=all")
+          }
+
+          '''
+          s = s.replace(old, '')
+          app.write_text(s)
+          PY
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
