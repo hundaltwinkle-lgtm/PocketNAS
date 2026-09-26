@@ -1,4 +1,4 @@
-/* PocketNAS v2.3 - native Android WebDAV Wi-Fi drive
+/* PocketNAS v3.0 - Android WebDAV + browser + automatic Windows drive
  * NativeActivity UI + foreground-service native core
  * Target: Android 9+ (arm64-v8a), Windows WebDAV clients.
  */
@@ -221,12 +221,14 @@ static char g_root[512] = "/storage/emulated/0";
 static char g_ip[64] = "NO LAN IP";
 static char g_password[32] = "";
 static char g_nonce[40] = "";
+static char g_device_id[24] = "";
 static char g_config_path[768] = "";
 static char g_status[96] = "STARTING";
 static int g_btn_start[4] = {0,0,0,0};
 static int g_btn_ro[4] = {0,0,0,0};
 static int g_btn_auth[4] = {0,0,0,0};
 static int g_btn_setpass[4] = {0,0,0,0};
+static int g_btn_storage[4] = {0,0,0,0};
 static volatile int g_password_custom = 0;
 static volatile int g_password_edit_mode = 0;
 static char g_password_edit[24] = "";
@@ -284,22 +286,25 @@ static void make_password(void){
     static const char al[]="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";uint8_t r[12];if(!random_bytes(r,sizeof(r))){for(int i=0;i<12;i++)r[i]=(uint8_t)(i*17+41);}for(int i=0;i<10;i++)g_password[i]=al[r[i]%32];g_password[10]=0;
     uint8_t n[16];if(!random_bytes(n,sizeof(n)))for(int i=0;i<16;i++)n[i]=(uint8_t)(r[i%12]^i*31);static const char hx[]="0123456789abcdef";for(int i=0;i<16;i++){g_nonce[i*2]=hx[n[i]>>4];g_nonce[i*2+1]=hx[n[i]&15];}g_nonce[32]=0;
 }
+static void make_device_id(void){
+    uint8_t r[8];static const char hx[]="0123456789abcdef";if(!random_bytes(r,sizeof(r)))for(int i=0;i<8;i++)r[i]=(uint8_t)(0x53+i*29);for(int i=0;i<8;i++){g_device_id[i*2]=hx[r[i]>>4];g_device_id[i*2+1]=hx[r[i]&15];}g_device_id[16]=0;
+}
 static void save_config(void){
-    if(!g_config_path[0])return;char b[320];int n=snprintf(b,sizeof(b),"CONFIG_VERSION=20\nPASSWORD=%s\nPASSWORD_CUSTOM=%d\nAUTH=%d\nREADONLY=%d\n",g_password,g_password_custom?1:0,g_auth?1:0,g_readonly?1:0);int fd=open(g_config_path,O_WRONLY|O_CREAT|O_TRUNC,0600);if(fd>=0){write(fd,b,(size_t)n);fsync(fd);close(fd);}
+    if(!g_config_path[0])return;char b[384];int n=snprintf(b,sizeof(b),"CONFIG_VERSION=30\nDEVICE_ID=%s\nPASSWORD=%s\nPASSWORD_CUSTOM=%d\nAUTH=%d\nREADONLY=%d\n",g_device_id,g_password,g_password_custom?1:0,g_auth?1:0,g_readonly?1:0);int fd=open(g_config_path,O_WRONLY|O_CREAT|O_TRUNC,0600);if(fd>=0){write(fd,b,(size_t)n);fsync(fd);close(fd);}
 }
 static void load_config(void){
-    /* v1.4 starts with authentication OFF. A password becomes permanent only
-       after the user explicitly saves one in the on-screen password editor. */
-    make_password();g_auth=0;g_password_custom=0;if(!g_config_path[0])return;int fd=open(g_config_path,O_RDONLY);if(fd<0){save_config();return;}char b[640];ssize_t n=read(fd,b,sizeof(b)-1);close(fd);if(n<=0)return;b[n]=0;
-    int is_v20=strstr(b,"CONFIG_VERSION=20")!=NULL;
-    int had_custom_marker=strstr(b,"PASSWORD_CUSTOM=1")!=NULL;
-    char *p=strstr(b,"PASSWORD=");if(p){p+=9;char *e=strchr(p,'\n');size_t l=e?(size_t)(e-p):strlen(p);if(l>0&&l<sizeof(g_password)){memcpy(g_password,p,l);g_password[l]=0;}}
+    /* v3 preserves the existing permanent password/auth/read-only choices and
+       adds a stable per-install device id used by Windows automatic discovery. */
+    make_password();make_device_id();g_auth=0;g_password_custom=0;if(!g_config_path[0])return;int fd=open(g_config_path,O_RDONLY);if(fd<0){save_config();return;}char b[768];ssize_t n=read(fd,b,sizeof(b)-1);close(fd);if(n<=0){save_config();return;}b[n]=0;
+    int known=strstr(b,"CONFIG_VERSION=30")!=NULL||strstr(b,"CONFIG_VERSION=20")!=NULL;
+    int had_custom_marker=strstr(b,"PASSWORD_CUSTOM=1")!=NULL;int needs_save=strstr(b,"CONFIG_VERSION=30")==NULL;
+    char *p=strstr(b,"DEVICE_ID=");if(p){p+=10;char *e=strchr(p,'\n');size_t l=e?(size_t)(e-p):strlen(p);if(l>0&&l<sizeof(g_device_id)){memcpy(g_device_id,p,l);g_device_id[l]=0;}else needs_save=1;}else needs_save=1;
+    p=strstr(b,"PASSWORD=");if(p){p+=9;char *e=strchr(p,'\n');size_t l=e?(size_t)(e-p):strlen(p);if(l>0&&l<sizeof(g_password)){memcpy(g_password,p,l);g_password[l]=0;}}
     p=strstr(b,"PASSWORD_CUSTOM=");if(p)g_password_custom=(p[16]=='1');
     p=strstr(b,"READONLY=");if(p)g_readonly=(p[9]=='1');
-    /* Existing v1.0-v1.3 configs are migrated with auth disabled so an update
-       cannot unexpectedly lock Windows out. */
-    if(is_v20){p=strstr(b,"AUTH=");if(p)g_auth=(p[5]=='1');}
-    else{g_auth=0;if(had_custom_marker)g_password_custom=1;save_config();}
+    if(known){p=strstr(b,"AUTH=");if(p)g_auth=(p[5]=='1');}
+    else{g_auth=0;if(had_custom_marker)g_password_custom=1;needs_save=1;}
+    if(needs_save)save_config();
 }
 static void ensure_config_loaded(void){
     if(g_config_loaded)return;
@@ -330,7 +335,7 @@ static int find_lan_ip(char out[64],uint32_t *addr_out){
 }
 static int send_all(int fd,const void *buf,size_t n){const uint8_t*p=(const uint8_t*)buf;size_t off=0;while(off<n){ssize_t r=send(fd,p+off,n-off,0);if(r<=0)return 0;off+=(size_t)r;__atomic_fetch_add(&g_bytes_out,(uint64_t)r,__ATOMIC_RELAXED);}return 1;}
 static int send_str(int fd,const char*s){return send_all(fd,s,strlen(s));}
-static void http_simple(int fd,int code,const char*reason,const char*extra,const char*body){char h[1024];size_t bl=body?strlen(body):0;int n=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nServer: PocketNAS/2.3\r\nConnection: close\r\n%sContent-Length: %lu\r\n\r\n",code,reason,extra?extra:"",(unsigned long)bl);send_all(fd,h,(size_t)n);if(bl)send_all(fd,body,bl);}
+static void http_simple(int fd,int code,const char*reason,const char*extra,const char*body){char h[1024];size_t bl=body?strlen(body):0;int n=snprintf(h,sizeof(h),"HTTP/1.1 %d %s\r\nServer: PocketNAS/3.0\r\nConnection: close\r\n%sContent-Length: %lu\r\n\r\n",code,reason,extra?extra:"",(unsigned long)bl);send_all(fd,h,(size_t)n);if(bl)send_all(fd,body,bl);}
 static void http_no_body(int fd,int code,const char*reason,const char*extra){http_simple(fd,code,reason,extra,NULL);}
 
 /* ---------- URL/path helpers ---------- */
@@ -437,7 +442,7 @@ static int chunk_send(int fd,const char*s){size_t n=strlen(s);char h[32];int k=s
 static int chunk_end(int fd){return send_str(fd,"0\r\n\r\n");}
 static void href_for(const char*uri,const char*child,int isdir,char*out,size_t cap){char base[1024];str_copy(base,sizeof(base),uri);char*q=strchr(base,'?');if(q)*q=0;if(!base[0])str_copy(base,sizeof(base),"/");if(child){size_t n=strlen(base);if(n==0||base[n-1]!='/'){if(n+1<sizeof(base)){base[n++]='/';base[n]=0;}}char enc[768];url_encode_name(child,enc,sizeof(enc));snprintf(out,cap,"%s%s%s",base,enc,isdir?"/":"");}else{size_t n=strlen(base);if(isdir&&n&&base[n-1]!='/')snprintf(out,cap,"%s/",base);else str_copy(out,cap,base);}}
 static void dav_one(int fd,const char*href,const char*display,const char*path,int isdir,long long size){char hesc[2048],desc[1024],b[4608];xml_escape(href,hesc,sizeof(hesc));xml_escape(display,desc,sizeof(desc));if(isdir)snprintf(b,sizeof(b),"<D:response><D:href>%s</D:href><D:propstat><D:prop><D:displayname>%s</D:displayname><D:resourcetype><D:collection/></D:resourcetype><D:getcontentlength>0</D:getcontentlength><D:getlastmodified>Thu, 01 Jan 1970 00:00:00 GMT</D:getlastmodified><D:creationdate>1970-01-01T00:00:00Z</D:creationdate><D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock><D:lockdiscovery/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>",hesc,desc);else snprintf(b,sizeof(b),"<D:response><D:href>%s</D:href><D:propstat><D:prop><D:displayname>%s</D:displayname><D:resourcetype/><D:getcontentlength>%lld</D:getcontentlength><D:getcontenttype>%s</D:getcontenttype><D:getlastmodified>Thu, 01 Jan 1970 00:00:00 GMT</D:getlastmodified><D:creationdate>1970-01-01T00:00:00Z</D:creationdate><D:getetag>\"%lld\"</D:getetag><D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock><D:lockdiscovery/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>",hesc,desc,size,mime_type(path),size);chunk_send(fd,b);}
-static void handle_propfind(int fd,const HttpReq*r,const char*path){int dir=is_dir_path(path);if(!dir&&access(path,F_OK)!=0){http_no_body(fd,404,"Not Found",NULL);return;}send_str(fd,"HTTP/1.1 207 Multi-Status\r\nServer: PocketNAS/2.3\r\nContent-Type: application/xml; charset=utf-8\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nDAV: 1,2\r\n\r\n");chunk_send(fd,"<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\">");char href[2048];href_for(r->uri,NULL,dir,href,sizeof(href));const char*bn=basename_ptr(path);if(!bn[0])bn="PocketNAS";dav_one(fd,href,bn,path,dir,dir?0:file_size(path));int depth1=(r->depth[0]==0||r->depth[0]=='1');if(dir&&depth1){DIR*d=opendir(path);if(d){struct dirent*de;while((de=readdir(d))){if(!strcmp(de->d_name,".")||!strcmp(de->d_name,".."))continue;char cp[1536];snprintf(cp,sizeof(cp),"%s/%s",path,de->d_name);int cd=(de->d_type==DT_DIR)?1:(de->d_type==DT_REG?0:is_dir_path(cp));long long sz=cd?0:file_size(cp);href_for(r->uri,de->d_name,cd,href,sizeof(href));dav_one(fd,href,de->d_name,cp,cd,sz<0?0:sz);}closedir(d);}}chunk_send(fd,"</D:multistatus>");chunk_end(fd);}
+static void handle_propfind(int fd,const HttpReq*r,const char*path){int dir=is_dir_path(path);if(!dir&&access(path,F_OK)!=0){http_no_body(fd,404,"Not Found",NULL);return;}send_str(fd,"HTTP/1.1 207 Multi-Status\r\nServer: PocketNAS/3.0\r\nContent-Type: application/xml; charset=utf-8\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nDAV: 1,2\r\n\r\n");chunk_send(fd,"<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\">");char href[2048];href_for(r->uri,NULL,dir,href,sizeof(href));const char*bn=basename_ptr(path);if(!bn[0])bn="PocketNAS";dav_one(fd,href,bn,path,dir,dir?0:file_size(path));int depth1=(r->depth[0]==0||r->depth[0]=='1');if(dir&&depth1){DIR*d=opendir(path);if(d){struct dirent*de;while((de=readdir(d))){if(!strcmp(de->d_name,".")||!strcmp(de->d_name,".."))continue;char cp[1536];snprintf(cp,sizeof(cp),"%s/%s",path,de->d_name);int cd=(de->d_type==DT_DIR)?1:(de->d_type==DT_REG?0:is_dir_path(cp));long long sz=cd?0:file_size(cp);href_for(r->uri,de->d_name,cd,href,sizeof(href));dav_one(fd,href,de->d_name,cp,cd,sz<0?0:sz);}closedir(d);}}chunk_send(fd,"</D:multistatus>");chunk_end(fd);}
 
 /* ---------- filesystem operations ---------- */
 static int file_exists_any(const char*p){DIR*d=opendir(p);if(d){closedir(d);return 1;}int f=open(p,O_RDONLY);if(f>=0){close(f);return 1;}return 0;}
@@ -457,15 +462,322 @@ static int destination_path(const char*d,char*out,size_t cap){if(!d||!d[0])retur
 /* ---------- PUT body ---------- */
 static int write_put_body(int fd,const HttpReq*r,const char*raw,size_t raw_n,const char*path){int out=open(path,O_WRONLY|O_CREAT|O_TRUNC,0660);if(out<0)return 0;int ok=1;if(r->chunked){/* conservative chunked parser: buffer stream incrementally */size_t cap=131072;char*b=(char*)malloc(cap);if(!b){close(out);return 0;}size_t n=0;if(r->have){if(r->have>cap)n=cap;else n=r->have;memcpy(b,raw+r->body_off,n);}for(;;){/* ensure a full chunk-size line */char*le=NULL;for(size_t i=0;i+1<n;i++)if(b[i]=='\r'&&b[i+1]=='\n'){le=b+i;break;}while(!le&&n+1<cap){ssize_t z=recv(fd,b+n,cap-n,0);if(z<=0){ok=0;break;}n+=(size_t)z;__atomic_fetch_add(&g_bytes_in,(uint64_t)z,__ATOMIC_RELAXED);for(size_t i=0;i+1<n;i++)if(b[i]=='\r'&&b[i+1]=='\n'){le=b+i;break;}}if(!ok||!le)break;unsigned long cs=0;for(char*q=b;q<le;q++){int v=hexv(*q);if(v<0)break;cs=cs*16u+(unsigned)v;}size_t hdr=(size_t)(le-b)+2;while(n<hdr+cs+2){if(n==cap){ok=0;break;}ssize_t z=recv(fd,b+n,cap-n,0);if(z<=0){ok=0;break;}n+=(size_t)z;__atomic_fetch_add(&g_bytes_in,(uint64_t)z,__ATOMIC_RELAXED);}if(!ok)break;if(cs==0)break;size_t o=0;while(o<cs){ssize_t w=write(out,b+hdr+o,cs-o);if(w<=0){ok=0;break;}o+=(size_t)w;}if(!ok)break;size_t used=hdr+cs+2;if(used<n)memmove(b,b+used,n-used);n-=used;}free(b);}else{long long remain=r->content_length;size_t first=r->have;if((long long)first>remain)first=(size_t)remain;size_t o=0;while(o<first){ssize_t w=write(out,raw+r->body_off+o,first-o);if(w<=0){ok=0;break;}o+=(size_t)w;}remain-=(long long)first;char*b=(char*)malloc(65536);if(!b){ok=0;}while(ok&&remain>0){size_t want=remain>65536?65536:(size_t)remain;ssize_t z=recv(fd,b,want,0);if(z<=0){ok=0;break;}__atomic_fetch_add(&g_bytes_in,(uint64_t)z,__ATOMIC_RELAXED);size_t q=0;while(q<(size_t)z){ssize_t w=write(out,b+q,(size_t)z-q);if(w<=0){ok=0;break;}q+=(size_t)w;}remain-=z;}if(b)free(b);}fsync(out);close(out);if(!ok)unlink(path);return ok;}
 
+
+/* ---------- PocketNAS v3 Windows integration ---------- */
+static const char WINDOWS_SETUP_PS[] =
+    "# PocketNAS v3 Windows Auto Setup\n"
+    "# Creates a reliable large-file PocketNAS drive using rclone + WinFsp.\n"
+    "# This avoids the size/cache limits of Windows' built-in WebClient redirector.\n"
+    "\n"
+    "param(\n"
+    "    [string]$InitialUrl = \"\",\n"
+    "    [string]$PreferredDrive = \"P:\"\n"
+    ")\n"
+    "\n"
+    "$ErrorActionPreference = \"Stop\"\n"
+    "$ProgressPreference = \"SilentlyContinue\"\n"
+    "\n"
+    "function Write-Step([string]$Text) {\n"
+    "    Write-Host \"[PocketNAS] $Text\" -ForegroundColor Cyan\n"
+    "}\n"
+    "\n"
+    "function Test-Administrator {\n"
+    "    $id = [Security.Principal.WindowsIdentity]::GetCurrent()\n"
+    "    $p = [Security.Principal.WindowsPrincipal]::new($id)\n"
+    "    return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)\n"
+    "}\n"
+    "\n"
+    "if (-not (Test-Administrator)) {\n"
+    "    Write-Step \"Administrator permission is required once to install the Windows drive components.\"\n"
+    "    $args = \"-NoProfile -ExecutionPolicy Bypass -File `\"$PSCommandPath`\" -InitialUrl `\"$InitialUrl`\" -PreferredDrive `\"$PreferredDrive`\"\"\n"
+    "    Start-Process powershell.exe -Verb RunAs -ArgumentList $args\n"
+    "    exit\n"
+    "}\n"
+    "\n"
+    "Write-Host \"\"\n"
+    "Write-Host \"PocketNAS v3 - Windows Auto Setup\" -ForegroundColor Green\n"
+    "Write-Host \"This setup installs WinFsp and rclone, creates an automatic PocketNAS drive,\" \n"
+    "Write-Host \"and configures Windows WebDAV as a compatibility fallback.\"\n"
+    "Write-Host \"\"\n"
+    "\n"
+    "# 1) Keep Windows native WebDAV usable as a fallback.\n"
+    "Write-Step \"Configuring Windows WebClient fallback settings...\"\n"
+    "$webClientKey = \"HKLM:\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters\"\n"
+    "New-ItemProperty -Path $webClientKey -Name FileSizeLimitInBytes -PropertyType DWord -Value 4294967295 -Force | Out-Null\n"
+    "New-ItemProperty -Path $webClientKey -Name SendReceiveTimeoutInSec -PropertyType DWord -Value 600 -Force | Out-Null\n"
+    "New-ItemProperty -Path $webClientKey -Name LocalServerTimeoutInSec -PropertyType DWord -Value 120 -Force | Out-Null\n"
+    "New-ItemProperty -Path $webClientKey -Name FileAttributesLimitInBytes -PropertyType DWord -Value 20000000 -Force | Out-Null\n"
+    "try { Restart-Service WebClient -Force -ErrorAction Stop } catch { }\n"
+    "\n"
+    "# 2) Install large-file drive prerequisites.\n"
+    "if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {\n"
+    "    throw \"Windows Package Manager (winget) was not found. Update/install 'App Installer' from Microsoft Store, then run this setup again.\"\n"
+    "}\n"
+    "\n"
+    "Write-Step \"Installing/updating WinFsp...\"\n"
+    "winget install -e --id WinFsp.WinFsp --accept-package-agreements --accept-source-agreements --silent | Out-Host\n"
+    "Write-Step \"Installing/updating rclone...\"\n"
+    "winget install -e --id Rclone.Rclone --accept-package-agreements --accept-source-agreements --silent | Out-Host\n"
+    "\n"
+    "# Refresh PATH after winget installs.\n"
+    "$env:Path = [Environment]::GetEnvironmentVariable(\"Path\", \"Machine\") + \";\" + [Environment]::GetEnvironmentVariable(\"Path\", \"User\")\n"
+    "$rclone = (Get-Command rclone.exe -ErrorAction SilentlyContinue).Source\n"
+    "if (-not $rclone) {\n"
+    "    $candidate = Join-Path $env:LOCALAPPDATA \"Microsoft\\WinGet\\Links\\rclone.exe\"\n"
+    "    if (Test-Path $candidate) { $rclone = $candidate }\n"
+    "}\n"
+    "if (-not $rclone) { throw \"rclone was installed but rclone.exe could not be located. Sign out/in or reboot Windows, then run the setup again.\" }\n"
+    "\n"
+    "$baseDir = Join-Path $env:LOCALAPPDATA \"PocketNAS\"\n"
+    "New-Item -ItemType Directory -Path $baseDir -Force | Out-Null\n"
+    "$configFile = Join-Path $baseDir \"rclone.conf\"\n"
+    "$watcherFile = Join-Path $baseDir \"PocketNAS-AutoMount.ps1\"\n"
+    "$logFile = Join-Path $baseDir \"rclone.log\"\n"
+    "$settingsFile = Join-Path $baseDir \"settings.txt\"\n"
+    "\n"
+    "function Normalize-Url([string]$Url) {\n"
+    "    if (-not $Url) { return $null }\n"
+    "    $u = $Url.Trim()\n"
+    "    if (-not $u.EndsWith('/')) { $u += '/' }\n"
+    "    return $u\n"
+    "}\n"
+    "\n"
+    "function Get-PocketNasStatus([string]$Url, [int]$TimeoutSec = 2) {\n"
+    "    try {\n"
+    "        $u = (Normalize-Url $Url) + \"api/status\"\n"
+    "        $r = Invoke-RestMethod -Uri $u -TimeoutSec $TimeoutSec -UseBasicParsing\n"
+    "        if ($r.app -eq \"PocketNAS\") { return $r }\n"
+    "    } catch { }\n"
+    "    return $null\n"
+    "}\n"
+    "\n"
+    "function Test-Port8080([string]$Ip, [int]$TimeoutMs = 80) {\n"
+    "    $c = [Net.Sockets.TcpClient]::new()\n"
+    "    try {\n"
+    "        $ar = $c.BeginConnect($Ip, 8080, $null, $null)\n"
+    "        if (-not $ar.AsyncWaitHandle.WaitOne($TimeoutMs)) { return $false }\n"
+    "        $c.EndConnect($ar)\n"
+    "        return $true\n"
+    "    } catch { return $false }\n"
+    "    finally { $c.Dispose() }\n"
+    "}\n"
+    "\n"
+    "function Find-PocketNas([string]$FirstUrl, [string]$WantedDeviceId = \"\") {\n"
+    "    $first = Normalize-Url $FirstUrl\n"
+    "    if ($first) {\n"
+    "        $s = Get-PocketNasStatus $first 1\n"
+    "        if ($s -and ((-not $WantedDeviceId) -or $s.deviceId -eq $WantedDeviceId)) {\n"
+    "            return [pscustomobject]@{ Url = $first; Status = $s }\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "    # Fast candidates from the ARP cache.\n"
+    "    $seen = @{}\n"
+    "    $arpText = (arp -a 2>$null) -join \"`n\"\n"
+    "    foreach ($m in [regex]::Matches($arpText, '(?m)\\b(?:10|192\\.168|172\\.(?:1[6-9]|2\\d|3[01]))(?:\\.\\d{1,3}){2}\\b')) {\n"
+    "        $ip = $m.Value\n"
+    "        if ($seen[$ip]) { continue }\n"
+    "        $seen[$ip] = $true\n"
+    "        if (Test-Port8080 $ip 120) {\n"
+    "            $u = \"http://$ip`:8080/\"\n"
+    "            $s = Get-PocketNasStatus $u 1\n"
+    "            if ($s -and ((-not $WantedDeviceId) -or $s.deviceId -eq $WantedDeviceId)) {\n"
+    "                return [pscustomobject]@{ Url = $u; Status = $s }\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "\n"
+    "    # Fallback: scan local /24 networks. Port probe is deliberately short.\n"
+    "    $prefixes = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |\n"
+    "        Where-Object { $_.IPAddress -notmatch '^(127\\.|169\\.254\\.)' } |\n"
+    "        ForEach-Object {\n"
+    "            $p = $_.IPAddress.Split('.')\n"
+    "            if ($p.Count -eq 4) { \"$($p[0]).$($p[1]).$($p[2])\" }\n"
+    "        } | Sort-Object -Unique\n"
+    "\n"
+    "    foreach ($prefix in $prefixes) {\n"
+    "        foreach ($n in 1..254) {\n"
+    "            $ip = \"$prefix.$n\"\n"
+    "            if ($seen[$ip]) { continue }\n"
+    "            if (-not (Test-Port8080 $ip 45)) { continue }\n"
+    "            $u = \"http://$ip`:8080/\"\n"
+    "            $s = Get-PocketNasStatus $u 1\n"
+    "            if ($s -and ((-not $WantedDeviceId) -or $s.deviceId -eq $WantedDeviceId)) {\n"
+    "                return [pscustomobject]@{ Url = $u; Status = $s }\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
+    "    return $null\n"
+    "}\n"
+    "\n"
+    "Write-Step \"Finding PocketNAS on the local network...\"\n"
+    "$found = Find-PocketNas $InitialUrl\n"
+    "if (-not $found) { throw \"PocketNAS was not found. Make sure the phone and PC are on the same Wi-Fi and PocketNAS shows SERVER: RUNNING.\" }\n"
+    "$deviceId = [string]$found.Status.deviceId\n"
+    "$serverUrl = [string]$found.Url\n"
+    "Write-Host \"Found PocketNAS $deviceId at $serverUrl\" -ForegroundColor Green\n"
+    "\n"
+    "# Choose a free drive letter.\n"
+    "$drive = $PreferredDrive.ToUpper()\n"
+    "if ($drive -notmatch '^[D-Z]:$') { $drive = 'P:' }\n"
+    "if (Get-PSDrive -Name $drive.Substring(0,1) -ErrorAction SilentlyContinue) {\n"
+    "    foreach ($letter in @('P','Q','R','S','T','U','V','W','X','Y','Z')) {\n"
+    "        if (-not (Get-PSDrive -Name $letter -ErrorAction SilentlyContinue)) { $drive = \"$letter`:\"; break }\n"
+    "    }\n"
+    "}\n"
+    "\n"
+    "# Optional PocketNAS Digest credentials.\n"
+    "$userLine = \"\"\n"
+    "$passLine = \"\"\n"
+    "if ([bool]$found.Status.auth) {\n"
+    "    Write-Host \"PocketNAS authentication is ON.\" -ForegroundColor Yellow\n"
+    "    $secure = Read-Host \"Enter the permanent PocketNAS password\" -AsSecureString\n"
+    "    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)\n"
+    "    try { $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }\n"
+    "    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }\n"
+    "    $obscured = (& $rclone obscure $plain).Trim()\n"
+    "    $plain = $null\n"
+    "    $userLine = \"user = pocketnas\"\n"
+    "    $passLine = \"pass = $obscured\"\n"
+    "}\n"
+    "\n"
+    "function Write-RcloneConfig([string]$Url) {\n"
+    "    $lines = @(\n"
+    "        '[pocketnas]',\n"
+    "        'type = webdav',\n"
+    "        \"url = $Url\",\n"
+    "        'vendor = other'\n"
+    "    )\n"
+    "    if ($userLine) { $lines += $userLine }\n"
+    "    if ($passLine) { $lines += $passLine }\n"
+    "    Set-Content -Path $configFile -Value $lines -Encoding ASCII\n"
+    "}\n"
+    "Write-RcloneConfig $serverUrl\n"
+    "\n"
+    "# Save values used by the background watcher.\n"
+    "@(\n"
+    "    \"INITIAL_URL=$serverUrl\",\n"
+    "    \"DEVICE_ID=$deviceId\",\n"
+    "    \"DRIVE=$drive\",\n"
+    "    \"RCLONE=$rclone\",\n"
+    "    \"CONFIG=$configFile\",\n"
+    "    \"LOG=$logFile\"\n"
+    ") | Set-Content -Path $settingsFile -Encoding UTF8\n"
+    "\n"
+    "$watcherTemplate = @'\n"
+    "$ErrorActionPreference = \"SilentlyContinue\"\n"
+    "$settings = @{}\n"
+    "Get-Content \"@@SETTINGS@@\" | ForEach-Object {\n"
+    "    $p = $_.IndexOf('=')\n"
+    "    if ($p -gt 0) { $settings[$_.Substring(0,$p)] = $_.Substring($p+1) }\n"
+    "}\n"
+    "$InitialUrl = $settings['INITIAL_URL']\n"
+    "$DeviceId   = $settings['DEVICE_ID']\n"
+    "$Drive      = $settings['DRIVE']\n"
+    "$Rclone     = $settings['RCLONE']\n"
+    "$Config     = $settings['CONFIG']\n"
+    "$Log        = $settings['LOG']\n"
+    "\n"
+    "function Normalize-Url([string]$Url) { if(!$Url){return $null}; $u=$Url.Trim(); if(!$u.EndsWith('/')){$u+='/'}; return $u }\n"
+    "function Get-Status([string]$Url) {\n"
+    "    try { $r=Invoke-RestMethod -Uri ((Normalize-Url $Url)+'api/status') -TimeoutSec 1 -UseBasicParsing; if($r.app -eq 'PocketNAS' -and $r.deviceId -eq $DeviceId){return $r} } catch {}\n"
+    "    return $null\n"
+    "}\n"
+    "function Test-Port([string]$Ip,[int]$Ms=60){$c=[Net.Sockets.TcpClient]::new();try{$a=$c.BeginConnect($Ip,8080,$null,$null);if(!$a.AsyncWaitHandle.WaitOne($Ms)){return $false};$c.EndConnect($a);return $true}catch{return $false}finally{$c.Dispose()}}\n"
+    "function Find-Server {\n"
+    "    if(Get-Status $InitialUrl){return (Normalize-Url $InitialUrl)}\n"
+    "    $arp=(arp -a 2>$null)-join \"`n\"; $seen=@{}\n"
+    "    foreach($m in [regex]::Matches($arp,'(?m)\\b(?:10|192\\.168|172\\.(?:1[6-9]|2\\d|3[01]))(?:\\.\\d{1,3}){2}\\b')){$ip=$m.Value;if($seen[$ip]){continue};$seen[$ip]=$true;if(Test-Port $ip 100){$u=\"http://$ip`:8080/\";if(Get-Status $u){return $u}}}\n"
+    "    $prefixes=Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue|?{$_.IPAddress -notmatch '^(127\\.|169\\.254\\.)'}|%{$p=$_.IPAddress.Split('.');if($p.Count -eq 4){\"$($p[0]).$($p[1]).$($p[2])\"}}|sort -Unique\n"
+    "    foreach($pre in $prefixes){foreach($n in 1..254){$ip=\"$pre.$n\";if($seen[$ip]){continue};if(Test-Port $ip 40){$u=\"http://$ip`:8080/\";if(Get-Status $u){return $u}}}}\n"
+    "    return $null\n"
+    "}\n"
+    "function Update-Config([string]$Url){$c=Get-Content $Config; $c=$c|%{if($_ -like 'url = *'){\"url = $Url\"}else{$_}}; Set-Content -Path $Config -Value $c -Encoding ASCII}\n"
+    "$rcloneProc=$null; $currentUrl=''\n"
+    "while($true){\n"
+    "    $url=Find-Server\n"
+    "    if($url){\n"
+    "        if($currentUrl -ne $url -or !$rcloneProc -or $rcloneProc.HasExited){\n"
+    "            if($rcloneProc -and !$rcloneProc.HasExited){try{$rcloneProc.Kill()}catch{};Start-Sleep -Seconds 2}\n"
+    "            Update-Config $url\n"
+    "            $args=@('mount','pocketnas:',$Drive,'--config',$Config,'--vfs-cache-mode','writes','--vfs-cache-max-age','1h','--dir-cache-time','5s','--poll-interval','0','--network-mode','--log-file',$Log,'--log-level','INFO')\n"
+    "            $rcloneProc=Start-Process -FilePath $Rclone -ArgumentList $args -WindowStyle Hidden -PassThru\n"
+    "            $currentUrl=$url\n"
+    "            Start-Sleep -Seconds 5\n"
+    "        }\n"
+    "    }\n"
+    "    Start-Sleep -Seconds 15\n"
+    "}\n"
+    "'@\n"
+    "$watcher = $watcherTemplate.Replace('@@SETTINGS@@', $settingsFile.Replace(\"'\", \"''\"))\n"
+    "Set-Content -Path $watcherFile -Value $watcher -Encoding UTF8\n"
+    "\n"
+    "# Start the watcher automatically whenever this Windows user signs in.\n"
+    "$startup = [Environment]::GetFolderPath('Startup')\n"
+    "$launcher = Join-Path $startup \"PocketNAS Auto Mount.cmd\"\n"
+    "$cmd = '@echo off' + \"`r`n\" + 'start \"\" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"' + $watcherFile + '\"' + \"`r`n\"\n"
+    "Set-Content -Path $launcher -Value $cmd -Encoding ASCII\n"
+    "\n"
+    "# Stop any previous watcher from an older setup, then launch the new one.\n"
+    "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" -ErrorAction SilentlyContinue |\n"
+    "    Where-Object { $_.CommandLine -like \"*$watcherFile*\" } |\n"
+    "    ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force } catch {} }\n"
+    "Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',$watcherFile) -WindowStyle Hidden\n"
+    "\n"
+    "Write-Host \"\"\n"
+    "Write-Host \"PocketNAS Windows Drive setup is complete.\" -ForegroundColor Green\n"
+    "Write-Host \"Drive letter: $drive\"\n"
+    "Write-Host \"The drive will auto-discover this phone and reconnect after Windows sign-in or phone IP changes.\"\n"
+    "Write-Host \"Large transfers use rclone/WinFsp instead of the Windows WebClient redirector.\"\n"
+    "Write-Host \"\"\n"
+    "Write-Step \"Waiting for the drive to appear...\"\n"
+    "for($i=0;$i -lt 20;$i++){\n"
+    "    Start-Sleep -Seconds 1\n"
+    "    if(Test-Path \"$drive\\\") { Start-Process explorer.exe \"$drive\\\"; break }\n"
+    "}\n"
+    "if(-not (Test-Path \"$drive\\\")){\n"
+    "    Write-Host \"The drive did not appear yet. WinFsp may require a Windows restart after first installation.\" -ForegroundColor Yellow\n"
+    "    Write-Host \"After restarting Windows, PocketNAS Auto Mount will start automatically.\"\n"
+    "}\n"
+    "Read-Host \"Press Enter to close\"\n";
+
+static void handle_api_status(int fd,int head_only){
+    refresh_storage();char body[512];snprintf(body,sizeof(body),"{\"app\":\"PocketNAS\",\"version\":\"3.0\",\"deviceId\":\"%s\",\"auth\":%s,\"readOnly\":%s,\"storageWritable\":%s,\"ip\":\"%s\",\"port\":8080}",g_device_id,g_auth?"true":"false",g_readonly?"true":"false",g_storage_writable?"true":"false",g_ip);
+    char h[1024];size_t bl=strlen(body);int n=snprintf(h,sizeof(h),"HTTP/1.1 200 OK\r\nServer: PocketNAS/3.0\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: %lu\r\nConnection: close\r\n\r\n",(unsigned long)bl);send_all(fd,h,(size_t)n);if(!head_only)send_all(fd,body,bl);
+}
+static void handle_windows_setup(int fd,int head_only){
+    size_t bl=strlen(WINDOWS_SETUP_PS);char h[1200];int n=snprintf(h,sizeof(h),"HTTP/1.1 200 OK\r\nServer: PocketNAS/3.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Disposition: attachment; filename=\"PocketNAS-Windows-Setup.ps1\"\r\nCache-Control: no-store\r\nContent-Length: %lu\r\nConnection: close\r\n\r\n",(unsigned long)bl);send_all(fd,h,(size_t)n);if(!head_only)send_all(fd,WINDOWS_SETUP_PS,bl);
+}
+
 /* ---------- WebDAV handlers ---------- */
+static void html_escape(const char*in,char*out,size_t cap){size_t j=0;for(size_t i=0;in&&in[i]&&j+1<cap;i++){const char*r=NULL;switch(in[i]){case'&':r="&amp;";break;case'<':r="&lt;";break;case'>':r="&gt;";break;case'\"':r="&quot;";break;case'\'':r="&#39;";break;}if(r){size_t n=strlen(r);if(j+n>=cap)break;memcpy(out+j,r,n);j+=n;}else out[j++]=in[i];}out[j]=0;}
+static void human_size(long long n,char*out,size_t cap){if(n<0){str_copy(out,cap,"-");return;}if(n<1024){snprintf(out,cap,"%lld B",n);return;}if(n<1024ll*1024ll){snprintf(out,cap,"%lld KB",(n+512)/1024);return;}if(n<1024ll*1024ll*1024ll){snprintf(out,cap,"%lld MB",(n+524288)/(1024ll*1024ll));return;}snprintf(out,cap,"%lld GB",(n+536870912)/(1024ll*1024ll*1024ll));}
+static const char*browser_icon(const char*p,int dir){if(dir)return "&#128193;";const char*m=mime_type(p);if(!strncmp(m,"image/",6))return "&#128444;";if(!strncmp(m,"video/",6))return "&#127916;";if(!strncmp(m,"audio/",6))return "&#127925;";if(strstr(m,"zip")||strstr(m,"rar")||strstr(m,"7z")||strstr(m,"gzip"))return "&#128230;";if(ends_ci(p,".apk"))return "&#128241;";return "&#128196;";}
+static void clean_uri_path(const char*uri,char*out,size_t cap){size_t j=0;if(!uri||uri[0]!='/'){str_copy(out,cap,"/");return;}for(size_t i=0;uri[i]&&uri[i]!='?'&&uri[i]!='#'&&j+1<cap;i++)out[j++]=uri[i];out[j]=0;if(!j)str_copy(out,cap,"/");}
+static void parent_uri(const char*uri,char*out,size_t cap){char t[1024];clean_uri_path(uri,t,sizeof(t));size_t n=strlen(t);while(n>1&&t[n-1]=='/')t[--n]=0;while(n>1&&t[n-1]!='/')t[--n]=0;if(n==0)str_copy(t,sizeof(t),"/");str_copy(out,cap,t);}
+static void browser_dir(int fd,const HttpReq*r,const char*path,int head_only){
+    if(head_only){http_no_body(fd,200,"OK","Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n");return;}
+    char base[1024];clean_uri_path(r->uri,base,sizeof(base));size_t bn=strlen(base);if(bn==0||base[bn-1]!='/'){char loc[1200];snprintf(loc,sizeof(loc),"Location: %s/\r\n",base);http_no_body(fd,301,"Moved Permanently",loc);return;}
+    send_str(fd,"HTTP/1.1 200 OK\r\nServer: PocketNAS/3.0\r\nContent-Type: text/html; charset=utf-8\r\nTransfer-Encoding: chunked\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'\r\n\r\n");
+    chunk_send(fd,"<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><title>PocketNAS</title><style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0}.top{position:sticky;top:0;z-index:5;background:#111827;border-bottom:1px solid #334155;padding:14px 16px}.brand{font-weight:800;font-size:21px}.sub{font-size:12px;color:#94a3b8;margin-top:2px}.wrap{max-width:1000px;margin:auto;padding:14px}.bar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.btn,.search{border:1px solid #475569;background:#1e293b;color:#f8fafc;border-radius:10px;padding:10px 12px;font-size:14px}.btn{cursor:pointer}.btn.primary{background:#0f766e;border-color:#0f766e}.search{flex:1;min-width:180px}.crumb{display:flex;align-items:center;gap:8px;margin:5px 0 12px}.crumb a{color:#67e8f9;text-decoration:none}.grid{display:flex;flex-direction:column;border:1px solid #334155;border-radius:12px;overflow:hidden;background:#111827}.entry{display:grid;grid-template-columns:minmax(0,1fr) 90px auto;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #263244}.entry:last-child{border-bottom:0}.name{display:flex;gap:10px;align-items:center;min-width:0;color:#f8fafc;text-decoration:none}.icon{font-size:24px;min-width:28px}.label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.meta{color:#94a3b8;font-size:12px;text-align:right}.actions{display:flex;gap:6px}.small{border:1px solid #475569;background:#1e293b;color:#e2e8f0;border-radius:8px;padding:7px 9px;cursor:pointer;text-decoration:none;font-size:12px}.danger{border-color:#7f1d1d;color:#fecaca}.empty{text-align:center;padding:36px;color:#94a3b8}.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#020617;color:#fff;padding:10px 14px;border-radius:10px;display:none;z-index:10}.warn{border:1px solid #92400e;background:#451a03;color:#fde68a;border-radius:10px;padding:10px 12px;margin:8px 0 12px;font-size:13px}.foot{color:#64748b;font-size:12px;margin-top:12px}@media(max-width:650px){.entry{grid-template-columns:minmax(0,1fr) auto}.meta{display:none}.actions{grid-column:1/-1;padding-left:38px;flex-wrap:wrap}.small{padding:6px 8px}}</style></head><body><div class=\"top\"><div class=\"brand\">PocketNAS</div><div class=\"sub\">Browser File Manager &middot; Automatic Windows Drive setup for large files</div></div><div class=\"wrap\">");
+    refresh_storage();
+    if(!g_storage_writable)chunk_send(fd,"<div class=\"warn\"><b>Limited Android storage access.</b><br>Browsing may work, but upload, rename and delete are disabled. Open the PocketNAS app and tap <b>GRANT FULL STORAGE ACCESS</b>, then enable PocketNAS under All files access.</div>");
+    char ph[1536],pe[3072],necur[1024],crumb[4600];parent_uri(base,ph,sizeof(ph));html_escape(ph,pe,sizeof(pe));html_escape(basename_ptr(path),necur,sizeof(necur));if(strcmp(base,"/"))snprintf(crumb,sizeof(crumb),"<div class=\"crumb\"><a href=\"/\">Home</a><span>&rsaquo;</span><a href=\"%s\">Up</a><span>&rsaquo;</span><b>%s</b></div>",pe,necur);else str_copy(crumb,sizeof(crumb),"<div class=\"crumb\"><b>Phone storage</b></div>");chunk_send(fd,crumb);
+    if(g_readonly||!g_storage_writable)chunk_send(fd,"<div class=\"bar\"><input id=\"q\" class=\"search\" placeholder=\"Search files...\" oninput=\"filterList()\"><button class=\"btn\" onclick=\"location.reload()\">Refresh</button><a class=\"btn primary\" href=\"/PocketNAS-Windows-Setup.ps1\" download>Windows Drive Setup</a><span class=\"btn\">Write actions unavailable</span></div>");
+    else chunk_send(fd,"<div class=\"bar\"><input id=\"q\" class=\"search\" placeholder=\"Search files...\" oninput=\"filterList()\"><button class=\"btn primary\" onclick=\"document.getElementById('pick').click()\">Upload</button><input id=\"pick\" type=\"file\" multiple hidden onchange=\"uploadFiles(this.files)\"><button class=\"btn\" onclick=\"newFolder()\">New folder</button><button class=\"btn\" onclick=\"location.reload()\">Refresh</button><a class=\"btn primary\" href=\"/PocketNAS-Windows-Setup.ps1\" download>Windows Drive Setup</a></div>");
+    chunk_send(fd,"<div id=\"list\" class=\"grid\">");DIR*d=opendir(path);int count=0;if(d){struct dirent*de;while((de=readdir(d))){if(!strcmp(de->d_name,".")||!strcmp(de->d_name,".."))continue;char cp[1536];snprintf(cp,sizeof(cp),"%s/%s",path,de->d_name);int dir=(de->d_type==DT_DIR)?1:(de->d_type==DT_REG?0:is_dir_path(cp));char enc[768],u[2200],ue[4400],ne[1024],sz[64],row[7600];if(!url_encode_name(de->d_name,enc,sizeof(enc)))continue;snprintf(u,sizeof(u),"%s%s%s",base,enc,dir?"/":"");html_escape(u,ue,sizeof(ue));html_escape(de->d_name,ne,sizeof(ne));human_size(dir?-1:file_size(cp),sz,sizeof(sz));
+        if(dir){if(g_readonly||!g_storage_writable)snprintf(row,sizeof(row),"<div class=\"entry\"><a class=\"name\" href=\"%s\"><span class=\"icon\">%s</span><span class=\"label\">%s</span></a><div class=\"meta\">Folder</div><div class=\"actions\"><a class=\"small\" href=\"%s\">Open</a></div></div>",ue,browser_icon(cp,1),ne,ue);else snprintf(row,sizeof(row),"<div class=\"entry\"><a class=\"name\" href=\"%s\"><span class=\"icon\">%s</span><span class=\"label\">%s</span></a><div class=\"meta\">Folder</div><div class=\"actions\"><a class=\"small\" href=\"%s\">Open</a><button class=\"small\" data-u=\"%s\" onclick=\"renameItem(this.dataset.u,true)\">Rename</button><button class=\"small danger\" data-u=\"%s\" onclick=\"deleteItem(this.dataset.u)\">Delete</button></div></div>",ue,browser_icon(cp,1),ne,ue,ue,ue);}
+        else{if(g_readonly||!g_storage_writable)snprintf(row,sizeof(row),"<div class=\"entry\"><a class=\"name\" href=\"%s\"><span class=\"icon\">%s</span><span class=\"label\">%s</span></a><div class=\"meta\">%s</div><div class=\"actions\"><a class=\"small\" href=\"%s\">Open</a><a class=\"small\" href=\"%s?download=1\">Download</a></div></div>",ue,browser_icon(cp,0),ne,sz,ue,ue);else snprintf(row,sizeof(row),"<div class=\"entry\"><a class=\"name\" href=\"%s\"><span class=\"icon\">%s</span><span class=\"label\">%s</span></a><div class=\"meta\">%s</div><div class=\"actions\"><a class=\"small\" href=\"%s\">Open</a><a class=\"small\" href=\"%s?download=1\">Download</a><button class=\"small\" data-u=\"%s\" onclick=\"renameItem(this.dataset.u,false)\">Rename</button><button class=\"small danger\" data-u=\"%s\" onclick=\"deleteItem(this.dataset.u)\">Delete</button></div></div>",ue,browser_icon(cp,0),ne,sz,ue,ue,ue,ue);}chunk_send(fd,row);count++;}closedir(d);}if(!count)chunk_send(fd,"<div class=\"empty\">This folder is empty.</div>");chunk_send(fd,"</div><div class=\"foot\">PocketNAS v3.0 &middot; Same Wi-Fi only &middot; Do not expose port 8080 directly to the Internet.</div></div><div id=\"toast\" class=\"toast\"></div>");
+    chunk_send(fd,"<script>const ro=");chunk_send(fd,(g_readonly||!g_storage_writable)?"true":"false");chunk_send(fd,";function toast(s){let t=document.getElementById('toast');t.textContent=s;t.style.display='block';setTimeout(()=>t.style.display='none',2500)}function filterList(){let q=(document.getElementById('q').value||'').toLowerCase();document.querySelectorAll('.entry').forEach(e=>e.style.display=e.textContent.toLowerCase().includes(q)?'grid':'none')}async function deleteItem(u){if(ro||!confirm('Delete this item?'))return;let r=await fetch(u,{method:'DELETE'});if(r.ok){toast('Deleted');setTimeout(()=>location.reload(),350)}else{let t=await r.text();alert('Delete failed: HTTP '+r.status+(t?'\n'+t:''))}}async function renameItem(u,isDir){if(ro)return;let n=prompt('New name');if(!n)return;u=u.split('?')[0];let clean=u.endsWith('/')?u.slice(0,-1):u;let slash=clean.lastIndexOf('/');let parent=clean.slice(0,slash+1);let dest=location.origin+parent+encodeURIComponent(n)+(isDir?'/':'');let r=await fetch(u,{method:'MOVE',headers:{Destination:dest,Overwrite:'F'}});if(r.ok){toast('Renamed');setTimeout(()=>location.reload(),350)}else{let t=await r.text();alert('Rename failed: HTTP '+r.status+(t?'\n'+t:''))}}async function newFolder(){if(ro)return;let n=prompt('Folder name');if(!n)return;let b=location.pathname.endsWith('/')?location.pathname:location.pathname+'/';let r=await fetch(b+encodeURIComponent(n)+'/',{method:'MKCOL'});if(r.ok){toast('Folder created');setTimeout(()=>location.reload(),350)}else{let t=await r.text();alert('Create folder failed: HTTP '+r.status+(t?'\n'+t:''))}}async function uploadFiles(fs){if(ro||!fs||!fs.length)return;let b=location.pathname.endsWith('/')?location.pathname:location.pathname+'/';for(let f of fs){toast('Uploading '+f.name+'...');let r=await fetch(b+encodeURIComponent(f.name),{method:'PUT',body:f});if(!r.ok){let t=await r.text();alert('Upload failed for '+f.name+': HTTP '+r.status+(t?'\n'+t:''));return}}toast('Upload complete');setTimeout(()=>location.reload(),500)}</script></body></html>");chunk_end(fd);
+}
 static void handle_get(int fd,const HttpReq*r,const char*path,int head_only){
-    if(is_dir_path(path)){const char*body="<html><body><h2>PocketNAS</h2><p>This is a WebDAV folder. Add this address as a Windows network location.</p></body></html>";http_simple(fd,200,"OK","Content-Type: text/html; charset=utf-8\r\n",head_only?NULL:body);return;}
+    if(is_dir_path(path)){browser_dir(fd,r,path,head_only);return;}
     int f=open(path,O_RDONLY);if(f<0){http_no_body(fd,404,"Not Found",NULL);return;}off_t osz=lseek(f,0,SEEK_END);if(osz<0){close(f);http_no_body(fd,500,"Read Failed",NULL);return;}long long sz=(long long)osz,start=0,end=sz?sz-1:0;int rr=parse_range_header(r->range,sz,&start,&end);if(rr<0){char ex[128];snprintf(ex,sizeof(ex),"Content-Range: bytes */%lld\r\n",sz);close(f);http_no_body(fd,416,"Range Not Satisfiable",ex);return;}long long count=(sz==0)?0:(rr?end-start+1:sz);if(rr&&lseek(f,(off_t)start,SEEK_SET)<0){close(f);http_no_body(fd,500,"Seek Failed",NULL);return;}else if(!rr)lseek(f,0,SEEK_SET);
-    char h[1024];int n;if(rr)n=snprintf(h,sizeof(h),"HTTP/1.1 206 Partial Content\r\nServer: PocketNAS/2.3\r\nContent-Type: %s\r\nContent-Length: %lld\r\nContent-Range: bytes %lld-%lld/%lld\r\nConnection: close\r\nAccept-Ranges: bytes\r\n\r\n",mime_type(path),count,start,end,sz);else n=snprintf(h,sizeof(h),"HTTP/1.1 200 OK\r\nServer: PocketNAS/2.3\r\nContent-Type: %s\r\nContent-Length: %lld\r\nConnection: close\r\nAccept-Ranges: bytes\r\n\r\n",mime_type(path),count);send_all(fd,h,(size_t)n);
+    int download=(strstr(r->uri,"download=1")!=NULL);char h[1200];int n;if(rr)n=snprintf(h,sizeof(h),"HTTP/1.1 206 Partial Content\r\nServer: PocketNAS/3.0\r\nContent-Type: %s\r\nContent-Length: %lld\r\nContent-Range: bytes %lld-%lld/%lld\r\nConnection: close\r\nAccept-Ranges: bytes\r\n%s\r\n",mime_type(path),count,start,end,sz,download?"Content-Disposition: attachment\r\n":"");else n=snprintf(h,sizeof(h),"HTTP/1.1 200 OK\r\nServer: PocketNAS/3.0\r\nContent-Type: %s\r\nContent-Length: %lld\r\nConnection: close\r\nAccept-Ranges: bytes\r\n%s\r\n",mime_type(path),count,download?"Content-Disposition: attachment\r\n":"");send_all(fd,h,(size_t)n);
     if(!head_only&&count>0){char*b=(char*)malloc(65536);if(b){long long left=count;while(left>0){size_t want=left>65536?65536:(size_t)left;ssize_t z=read(f,b,want);if(z<=0)break;if(!send_all(fd,b,(size_t)z))break;left-=z;}free(b);}}close(f);
 }
 static void handle_lock(int fd,const HttpReq*r){(void)r;char body[1024];snprintf(body,sizeof(body),"<?xml version=\"1.0\" encoding=\"utf-8\"?><D:prop xmlns:D=\"DAV:\"><D:lockdiscovery><D:activelock><D:locktype><D:write/></D:locktype><D:lockscope><D:exclusive/></D:lockscope><D:depth>Infinity</D:depth><D:timeout>Second-3600</D:timeout><D:locktoken><D:href>opaquelocktoken:%s</D:href></D:locktoken></D:activelock></D:lockdiscovery></D:prop>",g_nonce);char ex[256];snprintf(ex,sizeof(ex),"Content-Type: application/xml; charset=utf-8\r\nLock-Token: <opaquelocktoken:%s>\r\n",g_nonce);http_simple(fd,200,"OK",ex,body);}
-static void handle_request(int fd,char*raw,size_t raw_n,HttpReq*r){__atomic_fetch_add(&g_requests,1,__ATOMIC_RELAXED);if(!strcmp(r->method,"OPTIONS")){http_no_body(fd,200,"OK","DAV: 1,2\r\nMS-Author-Via: DAV\r\nAllow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, MOVE, COPY, PROPFIND, PROPPATCH, LOCK, UNLOCK\r\n");return;}if(g_auth&&!auth_ok(r)){auth_challenge(fd);return;}char path[1536];if(!map_path(r->uri,path,sizeof(path))){http_no_body(fd,400,"Bad Request",NULL);return;}if(!strcmp(r->method,"PROPFIND")){handle_propfind(fd,r,path);return;}if(!strcmp(r->method,"GET")){handle_get(fd,r,path,0);return;}if(!strcmp(r->method,"HEAD")){handle_get(fd,r,path,1);return;}if(!strcmp(r->method,"LOCK")){handle_lock(fd,r);return;}if(!strcmp(r->method,"UNLOCK")){http_no_body(fd,204,"No Content",NULL);return;}if(!strcmp(r->method,"PROPPATCH")){http_simple(fd,207,"Multi-Status","Content-Type: application/xml; charset=utf-8\r\n","<?xml version=\"1.0\"?><D:multistatus xmlns:D=\"DAV:\"></D:multistatus>");return;}if(g_readonly){http_no_body(fd,403,"Forbidden",NULL);return;}if(!strcmp(r->method,"PUT")){int existed=(access(path,F_OK)==0);if(r->expect_continue)send_str(fd,"HTTP/1.1 100 Continue\r\n\r\n");if(write_put_body(fd,r,raw,raw_n,path))http_no_body(fd,existed?204:201,existed?"No Content":"Created",NULL);else{refresh_storage();set_status(g_storage_writable?"WRITE FAILED":"WRITE FAILED - GRANT ALL FILES ACCESS");http_no_body(fd,403,"Write Failed",NULL);}return;}if(!strcmp(r->method,"MKCOL")){if(mkdir(path,0770)==0)http_no_body(fd,201,"Created",NULL);else if(access(path,F_OK)==0)http_no_body(fd,405,"Method Not Allowed",NULL);else http_no_body(fd,409,"Conflict",NULL);return;}if(!strcmp(r->method,"DELETE")){int existed=file_exists_any(path);if(delete_recursive(path)){refresh_storage();set_status("DELETE OK");http_no_body(fd,204,"No Content",NULL);}else if(!existed){http_no_body(fd,404,"Not Found",NULL);}else{refresh_storage();set_status(g_storage_writable?"DELETE FAILED":"DELETE FAILED - GRANT ALL FILES ACCESS");http_no_body(fd,403,"Forbidden",g_storage_writable?NULL:"X-PocketNAS-Storage: limited\r\n");}return;}if(!strcmp(r->method,"MOVE")){char dst[1536];if(!destination_path(r->destination,dst,sizeof(dst))){http_no_body(fd,400,"Bad Destination",NULL);return;}int existed=(access(dst,F_OK)==0);if(existed&&r->overwrite[0]=='F'){http_no_body(fd,412,"Precondition Failed",NULL);return;}if(existed)delete_recursive(dst);if(rename(path,dst)==0)http_no_body(fd,existed?204:201,existed?"No Content":"Created",NULL);else http_no_body(fd,409,"Conflict",NULL);return;}if(!strcmp(r->method,"COPY")){char dst[1536];if(!destination_path(r->destination,dst,sizeof(dst))){http_no_body(fd,400,"Bad Destination",NULL);return;}int existed=(access(dst,F_OK)==0);if(existed&&r->overwrite[0]=='F'){http_no_body(fd,412,"Precondition Failed",NULL);return;}if(existed)delete_recursive(dst);if(copy_recursive(path,dst))http_no_body(fd,existed?204:201,existed?"No Content":"Created",NULL);else http_no_body(fd,409,"Conflict",NULL);return;}http_no_body(fd,405,"Method Not Allowed","Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, MOVE, COPY, PROPFIND, PROPPATCH, LOCK, UNLOCK\r\n");}
+static void handle_request(int fd,char*raw,size_t raw_n,HttpReq*r){__atomic_fetch_add(&g_requests,1,__ATOMIC_RELAXED);if(!strcmp(r->method,"OPTIONS")){http_no_body(fd,200,"OK","DAV: 1,2\r\nMS-Author-Via: DAV\r\nAllow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, MOVE, COPY, PROPFIND, PROPPATCH, LOCK, UNLOCK\r\n");return;}int gh=!strcmp(r->method,"GET")||!strcmp(r->method,"HEAD");if(gh&&!strncmp(r->uri,"/api/status",11)){handle_api_status(fd,!strcmp(r->method,"HEAD"));return;}if(gh&&!strncmp(r->uri,"/PocketNAS-Windows-Setup.ps1",31)){handle_windows_setup(fd,!strcmp(r->method,"HEAD"));return;}if(g_auth&&!auth_ok(r)){auth_challenge(fd);return;}char path[1536];if(!map_path(r->uri,path,sizeof(path))){http_no_body(fd,400,"Bad Request",NULL);return;}if(!strcmp(r->method,"PROPFIND")){handle_propfind(fd,r,path);return;}if(!strcmp(r->method,"GET")){handle_get(fd,r,path,0);return;}if(!strcmp(r->method,"HEAD")){handle_get(fd,r,path,1);return;}if(!strcmp(r->method,"LOCK")){handle_lock(fd,r);return;}if(!strcmp(r->method,"UNLOCK")){http_no_body(fd,204,"No Content",NULL);return;}if(!strcmp(r->method,"PROPPATCH")){http_simple(fd,207,"Multi-Status","Content-Type: application/xml; charset=utf-8\r\n","<?xml version=\"1.0\"?><D:multistatus xmlns:D=\"DAV:\"></D:multistatus>");return;}int mutating=!strcmp(r->method,"PUT")||!strcmp(r->method,"MKCOL")||!strcmp(r->method,"DELETE")||!strcmp(r->method,"MOVE")||!strcmp(r->method,"COPY");if(mutating){refresh_storage();if(!g_storage_writable){set_status("WRITE BLOCKED - GRANT ALL FILES ACCESS");http_simple(fd,403,"Forbidden","Content-Type: text/plain; charset=utf-8\r\nX-PocketNAS-Storage: limited\r\n","PocketNAS does not have Android All files access. Open the PocketNAS app, tap GRANT FULL STORAGE ACCESS, and enable PocketNAS in Android settings.");return;}}if(g_readonly){http_simple(fd,403,"Forbidden","Content-Type: text/plain; charset=utf-8\r\n","PocketNAS is in read-only mode.");return;}if(!strcmp(r->method,"PUT")){int existed=(access(path,F_OK)==0);if(r->expect_continue)send_str(fd,"HTTP/1.1 100 Continue\r\n\r\n");if(write_put_body(fd,r,raw,raw_n,path))http_no_body(fd,existed?204:201,existed?"No Content":"Created",NULL);else{refresh_storage();set_status(g_storage_writable?"WRITE FAILED":"WRITE FAILED - GRANT ALL FILES ACCESS");http_no_body(fd,403,"Write Failed",NULL);}return;}if(!strcmp(r->method,"MKCOL")){if(mkdir(path,0770)==0)http_no_body(fd,201,"Created",NULL);else if(access(path,F_OK)==0)http_no_body(fd,405,"Method Not Allowed",NULL);else http_no_body(fd,409,"Conflict",NULL);return;}if(!strcmp(r->method,"DELETE")){int existed=file_exists_any(path);if(delete_recursive(path)){refresh_storage();set_status("DELETE OK");http_no_body(fd,204,"No Content",NULL);}else if(!existed){http_no_body(fd,404,"Not Found",NULL);}else{refresh_storage();set_status(g_storage_writable?"DELETE FAILED":"DELETE FAILED - GRANT ALL FILES ACCESS");http_no_body(fd,403,"Forbidden",g_storage_writable?NULL:"X-PocketNAS-Storage: limited\r\n");}return;}if(!strcmp(r->method,"MOVE")){char dst[1536];if(!destination_path(r->destination,dst,sizeof(dst))){http_no_body(fd,400,"Bad Destination",NULL);return;}int existed=(access(dst,F_OK)==0);if(existed&&r->overwrite[0]=='F'){http_no_body(fd,412,"Precondition Failed",NULL);return;}if(existed)delete_recursive(dst);if(rename(path,dst)==0)http_no_body(fd,existed?204:201,existed?"No Content":"Created",NULL);else http_no_body(fd,409,"Conflict",NULL);return;}if(!strcmp(r->method,"COPY")){char dst[1536];if(!destination_path(r->destination,dst,sizeof(dst))){http_no_body(fd,400,"Bad Destination",NULL);return;}int existed=(access(dst,F_OK)==0);if(existed&&r->overwrite[0]=='F'){http_no_body(fd,412,"Precondition Failed",NULL);return;}if(existed)delete_recursive(dst);if(copy_recursive(path,dst))http_no_body(fd,existed?204:201,existed?"No Content":"Created",NULL);else http_no_body(fd,409,"Conflict",NULL);return;}http_no_body(fd,405,"Method Not Allowed","Allow: OPTIONS, GET, HEAD, PUT, DELETE, MKCOL, MOVE, COPY, PROPFIND, PROPPATCH, LOCK, UNLOCK\r\n");}
 
 static void *client_thread(void *arg){int fd=(int)(long)arg;__atomic_fetch_add(&g_clients,1,__ATOMIC_RELAXED);char*buf=(char*)malloc(131072);if(buf){size_t n=0;if(recv_headers(fd,buf,131072,&n)){HttpReq r;if(parse_request(buf,n,&r))handle_request(fd,buf,n,&r);else http_no_body(fd,400,"Bad Request",NULL);}free(buf);}shutdown(fd,SHUT_RDWR);close(fd);__atomic_fetch_sub(&g_clients,1,__ATOMIC_RELAXED);return NULL;}
 static void server_stop(void);
@@ -504,10 +816,51 @@ static void draw_ui(ANativeWindow*w){if(!w)return;ANativeWindow_setBuffersGeomet
     refresh_storage();if(!g_storage_ok)draw_text(p,b.stride,W,H,x,y,"STORAGE: PERMISSION REQUIRED",S,amber);else if(!g_storage_writable)draw_text(p,b.stride,W,H,x,y,"STORAGE: LIMITED - ENABLE ALL FILES ACCESS",S,amber);else draw_text(p,b.stride,W,H,x,y,"STORAGE: FULL READ/WRITE",S,green);y+=24*S;
     draw_text(p,b.stride,W,H,x,y,"WINDOWS ADDRESS",S,mut);y+=12*S;snprintf(line,sizeof(line),"HTTP://%s:8080/",g_ip);draw_text(p,b.stride,W,H,x,y,line,S,fg);y+=22*S;
     if(g_auth){snprintf(line,sizeof(line),"USER: pocketnas   PASS: %s",g_password);draw_text(p,b.stride,W,H,x,y,line,S,fg);}else{draw_text(p,b.stride,W,H,x,y,"AUTH: OFF - NO USER/PASSWORD REQUIRED",S,amber);}y+=16*S;draw_text(p,b.stride,W,H,x,y,g_password_custom?"PERMANENT PASSWORD: SAVED":"PERMANENT PASSWORD: NOT SET",S,g_password_custom?green:mut);y+=24*S;
-    fill_rect(p,b.stride,W,H,12*S,y-4*S,W-24*S,82*S,panel);draw_text(p,b.stride,W,H,x,y,"WINDOWS 11 SETUP",S,fg);y+=14*S;draw_text(p,b.stride,W,H,x,y,"THIS PC > ADD A NETWORK LOCATION",S,mut);y+=12*S;draw_text(p,b.stride,W,H,x,y,"ENTER THE HTTP ADDRESS ABOVE.",S,mut);y+=12*S;draw_text(p,b.stride,W,H,x,y,"PHONE AND PC MUST USE SAME WIFI.",S,mut);y+=32*S;
+    fill_rect(p,b.stride,W,H,12*S,y-4*S,W-24*S,82*S,panel);draw_text(p,b.stride,W,H,x,y,"WINDOWS AUTO SETUP",S,fg);y+=14*S;draw_text(p,b.stride,W,H,x,y,"OPEN THE ADDRESS ABOVE IN PC BROWSER.",S,mut);y+=12*S;draw_text(p,b.stride,W,H,x,y,"DOWNLOAD WINDOWS DRIVE SETUP.",S,mut);y+=12*S;draw_text(p,b.stride,W,H,x,y,"AUTO MOUNT + LARGE FILE SUPPORT.",S,mut);y+=32*S;
     int bw=W-32*S,bh=30*S;draw_button(p,b.stride,W,H,g_btn_start,16*S,y,bw,bh,g_server_running?"STOP SERVER":"START SERVER",S,g_server_running?red:blue,fg);y+=38*S;draw_button(p,b.stride,W,H,g_btn_ro,16*S,y,bw,bh,g_readonly?"READ ONLY: ON":"READ ONLY: OFF",S,g_readonly?amber:teal,fg);y+=38*S;draw_button(p,b.stride,W,H,g_btn_setpass,16*S,y,bw,bh,g_password_custom?"CHANGE PERMANENT PASSWORD":"SET PERMANENT PASSWORD",S,blue,fg);y+=38*S;draw_button(p,b.stride,W,H,g_btn_auth,16*S,y,bw,bh,g_auth?"AUTHENTICATION: ON":"AUTHENTICATION: OFF",S,g_auth?teal:amber,fg);y+=44*S;
-    if(!g_storage_ok||!g_storage_writable){draw_text(p,b.stride,W,H,x,y,"GRANT FULL STORAGE ACCESS:",S,amber);y+=13*S;draw_text(p,b.stride,W,H,x,y,"SETTINGS > SPECIAL APP ACCESS >",S,fg);y+=12*S;draw_text(p,b.stride,W,H,x,y,"ALL FILES ACCESS > POCKETNAS > ALLOW",S,fg);y+=12*S;draw_text(p,b.stride,W,H,x,y,"THEN RETURN TO THIS APP.",S,mut);}else{snprintf(line,sizeof(line),"REQUESTS: %llu  TRANSFER: %llu MB",(unsigned long long)g_requests,(unsigned long long)((g_bytes_in+g_bytes_out)/(1024ull*1024ull)));draw_text(p,b.stride,W,H,x,y,line,S,mut);y+=14*S;draw_text(p,b.stride,W,H,x,y,"FILES: ALL TYPES / RANGE / COPY / UPLOAD / DELETE",S,mut);}
+    if(!g_storage_ok||!g_storage_writable){draw_button(p,b.stride,W,H,g_btn_storage,16*S,y,bw,bh,"GRANT FULL STORAGE ACCESS",S,amber,fg);y+=38*S;draw_text(p,b.stride,W,H,x,y,"OPENS ANDROID ALL FILES ACCESS SETTINGS.",S,fg);y+=12*S;draw_text(p,b.stride,W,H,x,y,"ENABLE POCKETNAS, THEN RETURN HERE.",S,mut);}else{g_btn_storage[0]=g_btn_storage[1]=g_btn_storage[2]=g_btn_storage[3]=0;snprintf(line,sizeof(line),"REQUESTS: %llu  TRANSFER: %llu MB",(unsigned long long)g_requests,(unsigned long long)((g_bytes_in+g_bytes_out)/(1024ull*1024ull)));draw_text(p,b.stride,W,H,x,y,line,S,mut);y+=14*S;draw_text(p,b.stride,W,H,x,y,"FILES: ALL TYPES / RANGE / COPY / UPLOAD / DELETE",S,mut);}
     ANativeWindow_unlockAndPost(w);
+}
+
+/* ---------- Android storage-permission settings launcher ---------- */
+static int jni_exception_clear(JNIEnv *env);
+static int request_all_files_settings(ANativeActivity *a){
+    if(!a||!a->env||!a->clazz||!*a->env)return 0;
+    JNIEnv *env=a->env;void **t=(void **)(*env);
+    typedef jclass (*FFindClass)(JNIEnv*,const char*);
+    typedef jmethodID (*FGetMethodID)(JNIEnv*,jclass,const char*,const char*);
+    typedef jmethodID (*FGetStaticMethodID)(JNIEnv*,jclass,const char*,const char*);
+    typedef jobject (*FNewObject)(JNIEnv*,jclass,jmethodID,...);
+    typedef jobject (*FCallStaticObject)(JNIEnv*,jclass,jmethodID,...);
+    typedef jclass (*FGetObjectClass)(JNIEnv*,jobject);
+    typedef jstring (*FNewStringUTF)(JNIEnv*,const char*);
+    typedef void (*FCallVoid)(JNIEnv*,jobject,jmethodID,...);
+    typedef void (*FDeleteLocalRef)(JNIEnv*,jobject);
+    FFindClass FindClass=(FFindClass)t[6];FGetMethodID GetMethodID=(FGetMethodID)t[33];FGetStaticMethodID GetStaticMethodID=(FGetStaticMethodID)t[113];
+    FNewObject NewObject=(FNewObject)t[28];FCallStaticObject CallStaticObject=(FCallStaticObject)t[114];FGetObjectClass GetObjectClass=(FGetObjectClass)t[31];
+    FNewStringUTF NewStringUTF=(FNewStringUTF)t[167];FCallVoid CallVoid=(FCallVoid)t[61];FDeleteLocalRef DeleteLocalRef=(FDeleteLocalRef)t[23];
+    if(!FindClass||!GetMethodID||!GetStaticMethodID||!NewObject||!CallStaticObject||!GetObjectClass||!NewStringUTF||!CallVoid)return 0;
+    jclass ic=FindClass(env,"android/content/Intent");if(jni_exception_clear(env)||!ic)return 0;
+    jclass uc=FindClass(env,"android/net/Uri");if(jni_exception_clear(env)||!uc)return 0;
+    jmethodID parse=GetStaticMethodID(env,uc,"parse","(Ljava/lang/String;)Landroid/net/Uri;");if(jni_exception_clear(env)||!parse)return 0;
+    jstring us=NewStringUTF(env,"package:com.pocketnas.wifidrive");if(jni_exception_clear(env)||!us)return 0;
+    jobject uri=CallStaticObject(env,uc,parse,us);if(jni_exception_clear(env)||!uri)return 0;
+    jmethodID ctor=GetMethodID(env,ic,"<init>","(Ljava/lang/String;Landroid/net/Uri;)V");if(jni_exception_clear(env)||!ctor)return 0;
+    jstring action=NewStringUTF(env,"android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION");if(jni_exception_clear(env)||!action)return 0;
+    jobject intent=NewObject(env,ic,ctor,action,uri);if(jni_exception_clear(env)||!intent)return 0;
+    jclass ac=GetObjectClass(env,a->clazz);if(jni_exception_clear(env)||!ac)return 0;
+    jmethodID launch=GetMethodID(env,ac,"startActivity","(Landroid/content/Intent;)V");if(jni_exception_clear(env)||!launch)return 0;
+    CallVoid(env,a->clazz,launch,intent);int bad=jni_exception_clear(env);
+    if(bad){
+        /* OEM fallback: open the general All files access list. */
+        jmethodID ctor1=GetMethodID(env,ic,"<init>","(Ljava/lang/String;)V");jni_exception_clear(env);
+        jstring ga=NewStringUTF(env,"android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION");jni_exception_clear(env);
+        jobject gi=(ctor1&&ga)?NewObject(env,ic,ctor1,ga):NULL;jni_exception_clear(env);
+        if(gi){CallVoid(env,a->clazz,launch,gi);bad=jni_exception_clear(env);if(DeleteLocalRef)DeleteLocalRef(env,gi);}
+        if(DeleteLocalRef&&ga)DeleteLocalRef(env,ga);
+    }
+    if(DeleteLocalRef){DeleteLocalRef(env,ac);DeleteLocalRef(env,intent);DeleteLocalRef(env,action);DeleteLocalRef(env,uri);DeleteLocalRef(env,us);DeleteLocalRef(env,uc);DeleteLocalRef(env,ic);}
+    return bad?0:1;
 }
 
 /* ---------- foreground-service launcher from framework NativeActivity ---------- */
@@ -566,7 +919,8 @@ static void process_input(void){
                 if(!handled&&hit(g_keypad[10],x,y)){if(g_password_edit_len>0)g_password_edit[--g_password_edit_len]=0;handled=1;}
                 else if(!handled&&hit(g_keypad[11],x,y)){if(g_password_edit_len>=4){str_copy(g_password,sizeof(g_password),g_password_edit);g_password_custom=1;g_password_edit_mode=0;save_config();set_status("PERMANENT PASSWORD SAVED");}else set_status("PASSWORD MUST BE 4-16 DIGITS");handled=1;}
                 else if(!handled&&hit(g_keypad[12],x,y)){g_password_edit_mode=0;g_password_edit_len=0;g_password_edit[0]=0;set_status("PASSWORD CHANGE CANCELLED");handled=1;}
-            }else if(hit(g_btn_start,x,y)){if(g_server_running)server_stop();else server_start();handled=1;}
+            }else if(hit(g_btn_storage,x,y)){if(request_all_files_settings(g_activity))set_status("ENABLE POCKETNAS IN ALL FILES ACCESS");else set_status("OPEN SETTINGS > ALL FILES ACCESS MANUALLY");handled=1;}
+            else if(hit(g_btn_start,x,y)){if(g_server_running)server_stop();else server_start();handled=1;}
             else if(hit(g_btn_ro,x,y)){g_readonly=!g_readonly;save_config();handled=1;}
             else if(hit(g_btn_setpass,x,y)){g_password_edit_mode=1;g_password_edit_len=0;g_password_edit[0]=0;set_status("ENTER PERMANENT PASSWORD");handled=1;}
             else if(hit(g_btn_auth,x,y)){if(g_auth){g_auth=0;save_config();set_status("AUTHENTICATION OFF");}else if(!g_password_custom){g_password_edit_mode=1;g_password_edit_len=0;g_password_edit[0]=0;set_status("SET PASSWORD BEFORE ENABLING AUTH");}else{g_auth=1;save_config();set_status("AUTHENTICATION ON");}handled=1;}

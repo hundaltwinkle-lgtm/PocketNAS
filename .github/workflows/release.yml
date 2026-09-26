@@ -41,16 +41,16 @@ jobs:
             --ks-pass env:KS_PASS \
             --key-pass env:KEY_PASS \
             --ks-key-alias "$KEY_ALIAS" \
-            --out dist/PocketNAS-v2.3-arm64.apk \
-            build/PocketNAS-v2.3-unsigned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/PocketNAS-v2.3-arm64.apk
-          sha256sum dist/PocketNAS-v2.3-arm64.apk > dist/SHA256SUMS.txt
+            --out dist/PocketNAS-v2.4-arm64.apk \
+            build/PocketNAS-v2.4-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/PocketNAS-v2.4-arm64.apk
+          sha256sum dist/PocketNAS-v2.4-arm64.apk > dist/SHA256SUMS.txt
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            dist/PocketNAS-v2.3-arm64.apk dist/SHA256SUMS.txt \
+            dist/PocketNAS-v2.4-arm64.apk dist/SHA256SUMS.txt \
             --title "PocketNAS $GITHUB_REF_NAME" \
             --generate-notes \
             --prerelease

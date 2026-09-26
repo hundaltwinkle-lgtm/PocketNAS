@@ -6,7 +6,7 @@ PocketNAS does not intentionally filter files by extension. WebDAV exposes files
 application/octet-stream
 ```
 
-PocketNAS v2.3 additionally identifies common MIME types so Windows and applications can handle resources more naturally.
+PocketNAS v3.0 additionally identifies common MIME types so Windows and applications can handle resources more naturally.
 
 ## Built-in MIME mappings
 
@@ -26,7 +26,7 @@ Everything else remains downloadable as generic binary data.
 
 ## Range requests
 
-v2.3 implements single HTTP byte ranges and returns:
+v3.0 retains single HTTP byte ranges and returns:
 
 ```text
 HTTP/1.1 206 Partial Content

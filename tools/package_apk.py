@@ -4,7 +4,7 @@ import argparse, zipfile
 
 p=argparse.ArgumentParser(description='Package PocketNAS manifest, classes.dex and ARM64 native library into an unsigned APK.')
 p.add_argument('--root', default='build/apkroot')
-p.add_argument('--out', default='build/PocketNAS-v2.3-unsigned.apk')
+p.add_argument('--out', default='build/PocketNAS-v3.0-unsigned.apk')
 a=p.parse_args()
 root=Path(a.root)
 out=Path(a.out); out.parent.mkdir(parents=True,exist_ok=True)

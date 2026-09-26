@@ -20,7 +20,7 @@ Password: the permanent password saved in the app
 
 ## Do not use SMB syntax
 
-PocketNAS v2.3 is WebDAV, not SMB. These are not equivalent:
+PocketNAS v3.0 is WebDAV, not SMB. These are not equivalent:
 
 ```text
 Correct: http://192.168.1.20:8080/
@@ -74,3 +74,7 @@ curl.exe --digest -u "pocketnas:12345678" -X PROPFIND -H "Depth: 0" "http://192.
 ```
 
 Replace the example password.
+
+## PocketNAS v3 automatic Windows drive
+
+For large files and automatic reconnection, v3 recommends the setup served by the APK itself. Open the PocketNAS address in a Windows browser and click **Windows Drive Setup**. See [WINDOWS_AUTO_DRIVE.md](WINDOWS_AUTO_DRIVE.md).

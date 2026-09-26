@@ -12,7 +12,7 @@ PocketNAS
 
 Suggested description:
 
-> Turn an Android phone into a lightweight WebDAV Wi‑Fi drive for Windows File Explorer — no root required.
+> Turn an Android phone into a Wi‑Fi NAS with browser file manager, WebDAV and an auto-reconnecting Windows drive — no root required.
 
 Suggested topics:
 
@@ -38,7 +38,7 @@ From the extracted repository folder:
 ```powershell
 git init
 git add .
-git commit -m "Open-source PocketNAS v2.3 beta"
+git commit -m "Open-source PocketNAS v3.0 beta"
 git branch -M main
 ```
 
@@ -87,14 +87,14 @@ Do not publish until:
 Recommended first public tag:
 
 ```text
-v2.3.0-beta.1
+v3.0.0-beta.1
 ```
 
 Commands:
 
 ```powershell
-git tag -a v2.3.0-beta.1 -m "PocketNAS v2.3.0 beta 1"
-git push origin v2.3.0-beta.1
+git tag -a v3.0.0-beta.1 -m "PocketNAS v3.0.0 beta 1"
+git push origin v3.0.0-beta.1
 ```
 
 ## 7. Create the GitHub release
@@ -102,7 +102,7 @@ git push origin v2.3.0-beta.1
 Title:
 
 ```text
-PocketNAS v2.3.0 Beta 1
+PocketNAS v3.0.0 Beta 1
 ```
 
 Mark it as **Pre-release**.
@@ -110,32 +110,35 @@ Mark it as **Pre-release**.
 Upload:
 
 ```text
-PocketNAS-v2.3-arm64.apk
+PocketNAS-v3.0-arm64.apk
 SHA256SUMS.txt
 ```
 
 Recommended release body:
 
 ```markdown
-## PocketNAS v2.3.0 Beta 1
+## PocketNAS v3.0.0 Beta 1
 
 PocketNAS turns an ARM64 Android 9+ phone into a WebDAV Wi-Fi drive that can be accessed from Windows File Explorer on the same reachable local network.
 
 ### Highlights
-- Windows WebDAV access on port 8080
+- Browser File Manager + WebDAV on port 8080
 - Browse, upload, overwrite, create folders, rename/move, copy and delete
-- Read-only mode
-- Optional permanent password / Digest authentication
-- Foreground background service
-- Auto-start after Android reboot
-- Wi-Fi/IP reconnect handling
+- HTTP range streaming for large media
+- Automatic Windows Drive setup served by the APK
+- WinFsp + rclone large-file drive path
+- LAN auto-discovery and reconnect to the same phone after IP changes
+- Read-only mode and optional permanent password / Digest authentication
+- Foreground background service and Android boot auto-start
 
 ### Installation
-1. Download `PocketNAS-v2.3-arm64.apk`.
+1. Download `PocketNAS-v3.0-arm64.apk`.
 2. Install it on an ARM64 Android 9+ phone.
 3. Grant All files access if requested.
 4. Open PocketNAS and note the displayed `http://PHONE-IP:8080/` address.
-5. On Windows use **This PC → Add a network location** and enter that address.
+5. For browser access, open that address in a PC browser.
+6. For native WebDAV, use **This PC → Add a network location**.
+7. For the recommended large-file Windows workflow, click **Windows Drive Setup** in the PocketNAS browser page and run the downloaded PowerShell setup.
 
 ### Security notice
 Authentication is off by default and the connection uses unencrypted HTTP. PocketNAS is intended only for trusted local networks. Read `SECURITY.md` before regular use.
@@ -149,7 +152,7 @@ This is a beta/pre-release. Please report reproducible issues with Android model
 Publish the SHA-256 next to the APK. Users can verify on Windows with:
 
 ```powershell
-Get-FileHash .\PocketNAS-v2.3-arm64.apk -Algorithm SHA256
+Get-FileHash .\PocketNAS-v3.0-arm64.apk -Algorithm SHA256
 ```
 
 ## 9. Screenshot/video

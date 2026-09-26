@@ -1,5 +1,47 @@
 # Changelog
 
+## 3.0.0-beta.1
+
+- Added PocketNAS Windows Drive setup served directly by the Android APK.
+- Added Windows auto-discovery and reconnect watcher using a persistent device ID.
+- Added `/api/status` discovery endpoint.
+- Added automatic WinFsp/rclone install through winget for the Windows Drive workflow.
+- Added automatic drive-letter selection and sign-in startup mount.
+- Kept WebDAV as a compatibility path while routing large-file Windows Explorer usage through rclone/WinFsp.
+- Fixed Android All files access navigation with app-specific settings intent and OEM fallback.
+- Preserved browser file manager, foreground service, boot start, Digest auth, read-only mode and large-file range streaming.
+
+## v2.5.0-beta.1
+
+### Fixed
+- Prevents confusing browser `HTTP 403` delete failures when Android All files access is not granted.
+- Adds a native **GRANT FULL STORAGE ACCESS** button that opens Android's All files access settings.
+- Browser mode now detects limited storage permission and disables destructive/write controls until full access is granted.
+- WebDAV write/delete failures now return a human-readable permission explanation.
+- Storage capability is refreshed before every mutating WebDAV operation.
+
+### Browser UX
+- Shows a prominent limited-permission warning in Browser File Manager.
+- Delete/rename/upload/create-folder errors display the server's detailed message.
+
+
+## [2.5.0-beta.1] - 2026-09-26
+
+### Added
+- Responsive browser file manager served directly from PocketNAS folder URLs.
+- Browser upload, new-folder, rename, delete, open and explicit-download actions.
+- Browser search/filter for the current folder.
+- Mobile-responsive browser layout with file-type icons and human-readable sizes.
+- Browser-mode security headers and no-store caching.
+
+### Changed
+- Directory `GET` requests now render the browser file manager while WebDAV `PROPFIND` behavior remains unchanged.
+- Direct file download can be requested with `?download=1`.
+- Server identification updated to `PocketNAS/2.4`.
+
+### Compatibility
+- Keeps the v2.3 storage, MIME, byte-range, Windows WebDAV, background-service, reboot-start and optional-authentication behavior.
+
 All notable changes to PocketNAS are documented here.
 
 ## [2.3.0-beta.1] - 2026-09-25

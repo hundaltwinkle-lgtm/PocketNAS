@@ -18,9 +18,9 @@ if [[ ! -x "$CC" ]]; then echo "Compiler not found: $CC" >&2; exit 1; fi
 
 POCKETNAS_MANIFEST_OUT="$APKROOT/AndroidManifest.xml" python3 "$ROOT/tools/make_manifest.py"
 POCKETNAS_DEX_OUT="$APKROOT/classes.dex" python3 "$ROOT/tools/make_dex.py"
-python3 "$ROOT/tools/package_apk.py" --root "$APKROOT" --out "$BUILD/PocketNAS-v2.3-unsigned.apk"
-python3 "$ROOT/tools/verify_release.py" "$BUILD/PocketNAS-v2.3-unsigned.apk"
+python3 "$ROOT/tools/package_apk.py" --root "$APKROOT" --out "$BUILD/PocketNAS-v3.0-unsigned.apk"
+python3 "$ROOT/tools/verify_release.py" "$BUILD/PocketNAS-v3.0-unsigned.apk"
 
 echo
-echo "Unsigned APK: $BUILD/PocketNAS-v2.3-unsigned.apk"
+echo "Unsigned APK: $BUILD/PocketNAS-v3.0-unsigned.apk"
 echo "Sign it with Android build-tools apksigner. See docs/BUILDING.md."

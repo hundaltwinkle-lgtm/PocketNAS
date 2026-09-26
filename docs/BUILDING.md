@@ -1,6 +1,6 @@
 # Building PocketNAS from source
 
-This document describes the v2.3 build model. PocketNAS does not currently use Gradle.
+This document describes the v3.0 build model. PocketNAS does not currently use Gradle.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 Output:
 
 ```text
-build\PocketNAS-v2.3-unsigned.apk
+build\PocketNAS-v3.0-unsigned.apk
 ```
 
 ## Linux build
@@ -95,41 +95,41 @@ $ApkSigner = "$env:ANDROID_HOME\build-tools\35.0.0\apksigner.bat"
 & $ApkSigner sign `
   --ks .\pocketnas-release.jks `
   --ks-key-alias pocketnas `
-  --out .\dist\PocketNAS-v2.3-arm64.apk `
-  .\build\PocketNAS-v2.3-unsigned.apk
+  --out .\dist\PocketNAS-v3.0-arm64.apk `
+  .\build\PocketNAS-v3.0-unsigned.apk
 ```
 
 Verify:
 
 ```powershell
-& $ApkSigner verify --verbose --print-certs .\dist\PocketNAS-v2.3-arm64.apk
+& $ApkSigner verify --verbose --print-certs .\dist\PocketNAS-v3.0-arm64.apk
 ```
 
 ## Generate checksum
 
 ```powershell
-(Get-FileHash .\dist\PocketNAS-v2.3-arm64.apk -Algorithm SHA256).Hash.ToLower()
+(Get-FileHash .\dist\PocketNAS-v3.0-arm64.apk -Algorithm SHA256).Hash.ToLower()
 ```
 
 For a release checksum file:
 
 ```powershell
-$hash=(Get-FileHash .\dist\PocketNAS-v2.3-arm64.apk -Algorithm SHA256).Hash.ToLower()
-"$hash  PocketNAS-v2.3-arm64.apk" | Set-Content .\dist\SHA256SUMS.txt
+$hash=(Get-FileHash .\dist\PocketNAS-v3.0-arm64.apk -Algorithm SHA256).Hash.ToLower()
+"$hash  PocketNAS-v3.0-arm64.apk" | Set-Content .\dist\SHA256SUMS.txt
 ```
 
 ## Install on a test device
 
 ```powershell
 adb devices
-adb install -r .\dist\PocketNAS-v2.3-arm64.apk
+adb install -r .\dist\PocketNAS-v3.0-arm64.apk
 ```
 
 If the installed experimental build uses a different signing identity, Android will reject the update. In that case, back up needed settings/data and uninstall the old package first:
 
 ```powershell
 adb uninstall com.pocketnas.wifidrive
-adb install .\dist\PocketNAS-v2.3-arm64.apk
+adb install .\dist\PocketNAS-v3.0-arm64.apk
 ```
 
 ## Smoke test

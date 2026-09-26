@@ -27,4 +27,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PocketNAS-unsigned-ci
-          path: build/PocketNAS-v2.3-unsigned.apk
+          path: build/PocketNAS-v2.4-unsigned.apk

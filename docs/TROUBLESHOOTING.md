@@ -106,7 +106,7 @@ Remove passwords, private IPs if desired, personal filenames, signing material a
 
 ## Files appear but delete/rename/upload fails
 
-PocketNAS v2.3 distinguishes read/list access from full write/delete access. Look at the Android screen:
+PocketNAS v3.0 distinguishes read/list access from full write/delete access. Look at the Android screen:
 
 ```text
 STORAGE: FULL READ/WRITE
@@ -124,7 +124,7 @@ Android can still deny protected app-private paths such as other apps' `Android/
 
 ## Some media or file formats do not open correctly
 
-v2.3 adds MIME detection and byte-range support. If a file is visible but will not open:
+v3.0 retains MIME detection and byte-range support. If a file is visible but will not open:
 
 1. Copy/download it to the PC to distinguish protocol issues from the Windows application.
 2. Test with `curl.exe` to confirm the server returns the resource.
